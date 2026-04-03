@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "neco-pathrel",
+    "neco-filetree",
+    "neco-textpatch",
+    "neco-watchnorm",
+]
+default-members = [
+    "neco-pathrel",
+    "neco-filetree",
+    "neco-textpatch",
+    "neco-watchnorm",
+]
+resolver = "2"
