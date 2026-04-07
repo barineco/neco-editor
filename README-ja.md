@@ -17,6 +17,7 @@
 | [`neco-textview`](./neco-textview) | 効率的な位置・オフセット変換を持つ行インデックス付きテキストバッファ | なし | なし |
 | [`neco-decor`](./neco-decor) | エディタオーバーレイ向けスパンベースの装飾モデル | `neco-textview` | なし |
 | [`neco-diffcore`](./neco-diffcore) | 行単位の変更検出向け最小差分エンジン | なし | なし |
+| [`neco-wrap`](./neco-wrap) | 等幅エディタ向けのソフトラップ行マップ | `neco-textview` | なし |
 
 各 crate は crates.io で個別公開できるよう、意図的に独立性を保っています。運用は monorepo 体制ですが、実行時に密結合する単一フレームワークではありません。
 

@@ -1,0 +1,15 @@
+[package]
+name = "neco-wrap"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+repository = "https://github.com/barineco/neco-editor"
+readme = "README.md"
+documentation = "https://docs.rs/neco-wrap"
+keywords = ["wrap", "word-wrap", "line-break", "editor", "text"]
+categories = ["text-processing", "algorithms"]
+description = "Word wrap engine with pluggable line-breaking and character-width policies"
+
+[lib]
+path = "src/lib.rs"
