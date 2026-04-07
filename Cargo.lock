@@ -10,6 +10,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "neco-diffcore"
+version = "0.1.0"
+dependencies = [
+ "neco-textpatch",
+]
+
+[[package]]
 name = "neco-filetree"
 version = "0.1.2"
 dependencies = [

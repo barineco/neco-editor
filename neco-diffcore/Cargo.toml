@@ -1,0 +1,18 @@
+[package]
+name = "neco-diffcore"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Line-level and character-level diff computation with hunk mapping and side-by-side view support"
+repository = "https://github.com/barineco/neco-editor"
+readme = "README.md"
+documentation = "https://docs.rs/neco-diffcore"
+keywords = ["diff", "hunk", "myers", "side-by-side", "editor"]
+categories = ["text-processing", "algorithms"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+neco-textpatch = { version = "0.1.1", path = "../neco-textpatch" }
