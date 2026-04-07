@@ -1,0 +1,16 @@
+[package]
+name = "neco-editor-viewport"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Viewport geometry calculations for editor rendering"
+repository = "https://github.com/barineco/neco-editor"
+readme = "README.md"
+documentation = "https://docs.rs/neco-editor-viewport"
+keywords = ["editor", "viewport", "geometry", "caret", "scroll"]
+categories = ["text-processing"]
+
+[dependencies]
+neco-textview = { version = "0.2", path = "../neco-textview" }
+neco-wrap = { version = "0.1", path = "../neco-wrap" }
