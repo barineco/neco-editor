@@ -1,0 +1,19 @@
+[package]
+name = "neco-history"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Tree-based edit history with undo/redo and automatic checkpointing"
+repository = "https://github.com/barineco/neco-editor"
+readme = "README.md"
+documentation = "https://docs.rs/neco-history"
+keywords = ["undo", "redo", "history", "tree", "editor"]
+categories = ["data-structures", "text-processing"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+neco-tree = "0.1"
+neco-textpatch = { version = "0.1", path = "../neco-textpatch" }

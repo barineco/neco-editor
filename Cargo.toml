@@ -8,6 +8,7 @@ members = [
     "neco-decor",
     "neco-diffcore",
     "neco-wrap",
+    "neco-history",
 ]
 default-members = [
     "neco-pathrel",
@@ -18,5 +19,6 @@ default-members = [
     "neco-decor",
     "neco-diffcore",
     "neco-wrap",
+    "neco-history",
 ]
 resolver = "2"
