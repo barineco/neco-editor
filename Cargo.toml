@@ -13,6 +13,7 @@ members = [
     "neco-editor",
     "neco-editor-viewport",
     "neco-editor-search",
+    "neco-editor-wasm",
 ]
 default-members = [
     "neco-pathrel",
@@ -28,5 +29,6 @@ default-members = [
     "neco-editor",
     "neco-editor-viewport",
     "neco-editor-search",
+    "neco-editor-wasm",
 ]
 resolver = "2"

@@ -23,6 +23,7 @@
 | [`neco-editor`](./neco-editor) | テキスト・装飾・折り返し・履歴・シンタックスを統合したエディタバッファ | 上記すべて | なし |
 | [`neco-editor-viewport`](./neco-editor-viewport) | 可視行範囲・キャレット矩形・選択矩形・ヒットテスト向けピクセルジオメトリ補助 | `neco-textview`, `neco-wrap` | なし |
 | [`neco-editor-search`](./neco-editor-search) | バッファ検索エンジン（プレーンテキスト、正規表現、単語単位） | `neco-textview` | `regex` |
+| [`neco-editor-wasm`](./neco-editor-wasm) | `EditorHandle` を不透明な WASM エクスポートとして公開する wasm-bindgen バインディング | `neco-editor`, `neco-editor-viewport`, `neco-editor-search`, `neco-syntax-textmate` | `wasm-bindgen`, `js-sys` |
 
 各 crate は crates.io で個別公開できるよう、意図的に独立性を保っています。運用は monorepo 体制ですが、実行時に密結合する単一フレームワークではありません。
 
