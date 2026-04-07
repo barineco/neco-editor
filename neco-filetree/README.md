@@ -61,7 +61,7 @@ assert_eq!(plan.expand_paths, vec!["/workspace", "/workspace/src"]);
 | `FlatFileTreeRow` | Flattened row shape for visible tree rendering |
 | `RevealPlan` | Ordered ancestor expansion plan with `found` status |
 | `find_node_by_path(root, path, policy)` | Find one node by exact path |
-| `merge_subtree(root, subtree, policy)` | Replace the matching subtree while preserving other branches |
+| `merge_subtree(root, subtree, policy)` | Monotonic merge: recursively merge the matching subtree, preserving existing deeper children and sibling order |
 | `flatten_file_tree(root, collapsed_paths, include_root, policy)` | Convert a tree snapshot into visible rows |
 | `reveal_plan_for_path(root, target_path, policy)` | Compute which ancestor directories should be expanded |
 

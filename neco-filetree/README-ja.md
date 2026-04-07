@@ -6,7 +6,7 @@
 
 ## ツリーの扱い
 
-`neco-filetree` は中立なツリーノード型を定義し、すべての操作を純粋関数として保ちます。読み込み、監視連携、UI 状態は呼び出し側で持ち、このクレートは完全一致のパス探索、部分木の差し替え、折りたたみ集合を考慮した平坦化、表示対象までの祖先展開列計算を担当します。
+`neco-filetree` は中立なツリーノード型を定義し、すべての操作を純粋関数として保ちます。読み込み、監視連携、UI 状態は呼び出し側で持ち、このクレートの責務は完全一致のパス探索、部分木の差し替え、折りたたみ集合を考慮した平坦化、表示対象までの祖先展開列計算です。
 
 ディレクトリノードは `materialization` と `child_count` を持つので、実行時コードはホスト固有型をツリーに混ぜずに、完全取得済みの部分木と一部だけ読んだ一覧を区別できます。
 
@@ -61,7 +61,7 @@ assert_eq!(plan.expand_paths, vec!["/workspace", "/workspace/src"]);
 | `FlatFileTreeRow` | 可視ツリー描画向けの平坦な行データ |
 | `RevealPlan` | `found` と順序付き祖先展開列を持つ計画 |
 | `find_node_by_path(root, path, policy)` | 完全一致のパスでノードを探索する |
-| `merge_subtree(root, subtree, policy)` | 一致した部分木を差し替えつつ他の枝を保持する |
+| `merge_subtree(root, subtree, policy)` | 単調 merge: 一致した部分木を再帰的にマージし、既存の深い子孫と兄弟順序を保持する |
 | `flatten_file_tree(root, collapsed_paths, include_root, policy)` | ツリースナップショットを可視行へ変換する |
 | `reveal_plan_for_path(root, target_path, policy)` | 展開すべき祖先ディレクトリ群を計算する |
 

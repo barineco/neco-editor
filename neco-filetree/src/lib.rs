@@ -63,14 +63,47 @@ pub fn find_node_by_path<'a>(
     None
 }
 
-/// Replace the matching subtree while keeping non-target branches unchanged in value.
+/// Monotonic merge: recursively merge the matching subtree, preserving existing
+/// deeper children and sibling order. File nodes are replaced directly.
 pub fn merge_subtree(
     root: &FileTreeNode,
     subtree: FileTreeNode,
     policy: &PathPolicy,
 ) -> FileTreeNode {
     if path_eq(&root.path, &subtree.path, policy) {
-        return subtree;
+        if subtree.kind == FileTreeNodeKind::File {
+            return subtree;
+        }
+
+        let mut matched_incoming = vec![false; subtree.children.len()];
+        let mut next_children = Vec::with_capacity(root.children.len() + subtree.children.len());
+
+        for child in &root.children {
+            if let Some((index, incoming_child)) = subtree
+                .children
+                .iter()
+                .enumerate()
+                .find(|(_, incoming_child)| path_eq(&child.path, &incoming_child.path, policy))
+            {
+                matched_incoming[index] = true;
+                next_children.push(merge_subtree(child, incoming_child.clone(), policy));
+            } else {
+                next_children.push(child.clone());
+            }
+        }
+
+        next_children.extend(
+            subtree
+                .children
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !matched_incoming[*index])
+                .map(|(_, child)| child.clone()),
+        );
+
+        let mut next = subtree;
+        next.children = next_children;
+        return next;
     }
 
     let mut changed = false;
@@ -293,8 +326,10 @@ mod tests {
         );
         let merged = merge_subtree(&tree, replacement, &posix());
         let src = find_node_by_path(&merged, "/workspace/src", &posix()).expect("src should exist");
-        assert_eq!(src.children.len(), 1);
-        assert_eq!(src.children[0].name, "mod.rs");
+        assert_eq!(src.children.len(), 3);
+        assert_eq!(src.children[0].name, "lib.rs");
+        assert_eq!(src.children[1].name, "main.rs");
+        assert_eq!(src.children[2].name, "mod.rs");
     }
 
     #[test]
@@ -327,7 +362,105 @@ mod tests {
         let docs =
             find_node_by_path(&merged, "/workspace/docs", &posix()).expect("docs should exist");
         assert_eq!(docs.child_count, Some(9));
-        assert_eq!(docs.children[0].name, "reference.md");
+        assert_eq!(docs.children.len(), 2);
+        assert_eq!(docs.children[0].name, "guide.md");
+        assert_eq!(docs.children[1].name, "reference.md");
+    }
+
+    #[test]
+    fn merge_subtree_shallow_merge_preserves_deep_children() {
+        let tree = sample_tree();
+        let replacement = dir(
+            "src",
+            "/workspace/src",
+            DirectoryMaterialization::Partial,
+            Some(2),
+            Vec::new(),
+        );
+        let merged = merge_subtree(&tree, replacement, &posix());
+        let src = find_node_by_path(&merged, "/workspace/src", &posix()).expect("src should exist");
+        assert_eq!(src.materialization, DirectoryMaterialization::Partial);
+        assert_eq!(src.child_count, Some(2));
+        assert_eq!(src.children.len(), 2);
+        assert_eq!(src.children[0].name, "lib.rs");
+        assert_eq!(src.children[1].name, "main.rs");
+    }
+
+    #[test]
+    fn merge_subtree_file_node_is_replaced_directly() {
+        let tree = sample_tree();
+        let replacement = FileTreeNode {
+            name: "lib.rs".to_string(),
+            path: "/workspace/src/lib.rs".to_string(),
+            kind: FileTreeNodeKind::File,
+            children: Vec::new(),
+            materialization: DirectoryMaterialization::Partial,
+            child_count: Some(7),
+        };
+        let merged = merge_subtree(&tree, replacement.clone(), &posix());
+        let file = find_node_by_path(&merged, "/workspace/src/lib.rs", &posix())
+            .expect("file should exist");
+        assert_eq!(file, &replacement);
+    }
+
+    #[test]
+    fn merge_subtree_monotonic_keeps_unmatched_children() {
+        let tree = sample_tree();
+        let replacement = dir(
+            "src",
+            "/workspace/src",
+            DirectoryMaterialization::Complete,
+            Some(1),
+            vec![file("mod.rs", "/workspace/src/mod.rs")],
+        );
+        let merged = merge_subtree(&tree, replacement, &posix());
+        let src = find_node_by_path(&merged, "/workspace/src", &posix()).expect("src should exist");
+        assert_eq!(src.children.len(), 3);
+        assert!(src.children.iter().any(|child| child.name == "lib.rs"));
+        assert!(src.children.iter().any(|child| child.name == "main.rs"));
+        assert!(src.children.iter().any(|child| child.name == "mod.rs"));
+    }
+
+    #[test]
+    fn merge_subtree_preserves_existing_sibling_order() {
+        let tree = sample_tree();
+        let replacement = dir(
+            "src",
+            "/workspace/src",
+            DirectoryMaterialization::Complete,
+            Some(1),
+            vec![file("mod.rs", "/workspace/src/mod.rs")],
+        );
+        let merged = merge_subtree(&tree, replacement, &posix());
+        let src = find_node_by_path(&merged, "/workspace/src", &posix()).expect("src should exist");
+        let child_names = src
+            .children
+            .iter()
+            .map(|child| child.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(child_names, vec!["lib.rs", "main.rs", "mod.rs"]);
+    }
+
+    #[test]
+    fn merge_subtree_case_insensitive_matches_and_preserves_order() {
+        let tree = sample_tree();
+        let replacement = dir(
+            "SRC",
+            "/WORKSPACE/SRC",
+            DirectoryMaterialization::Complete,
+            Some(1),
+            vec![file("mod.rs", "/WORKSPACE/SRC/mod.rs")],
+        );
+        let merged = merge_subtree(&tree, replacement, &insensitive());
+        let src =
+            find_node_by_path(&merged, "/workspace/src", &insensitive()).expect("src should exist");
+        assert!(src.children.iter().any(|child| child.name == "lib.rs"));
+        assert!(src.children.iter().any(|child| child.name == "main.rs"));
+        assert!(src.children.iter().any(|child| child.name == "mod.rs"));
+        assert_eq!(src.children.len(), 3);
+        assert_eq!(src.children[0].name, "lib.rs");
+        assert_eq!(src.children[1].name, "main.rs");
+        assert_eq!(src.children[2].name, "mod.rs");
     }
 
     #[test]
