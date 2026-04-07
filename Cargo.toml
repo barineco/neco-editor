@@ -9,6 +9,7 @@ members = [
     "neco-diffcore",
     "neco-wrap",
     "neco-history",
+    "neco-syntax-textmate",
 ]
 default-members = [
     "neco-pathrel",
@@ -20,5 +21,6 @@ default-members = [
     "neco-diffcore",
     "neco-wrap",
     "neco-history",
+    "neco-syntax-textmate",
 ]
 resolver = "2"

@@ -21,6 +21,7 @@ More crates may be added over time.
 | [`neco-diffcore`](./neco-diffcore) | minimal diff engine for line-level change detection | none | none |
 | [`neco-wrap`](./neco-wrap) | soft-wrap line map for monospace editors | `neco-textview` | none |
 | [`neco-history`](./neco-history) | generic undo/redo history with tree-based branching | `neco-tree` (neco-crates) | none |
+| [`neco-syntax-textmate`](./neco-syntax-textmate) | TextMate grammar tokenizer built on syntect | none | `syntect` |
 
 Each crate is intentionally independent so it can be published and consumed separately on crates.io. The repository is a monorepo for maintenance convenience, not a runtime-coupled framework.
 

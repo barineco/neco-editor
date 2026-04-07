@@ -1,0 +1,331 @@
+%YAML 1.2
+---
+name: Pkl
+scope: source.pkl
+file_extensions:
+  - pkl
+  - pcf
+
+contexts:
+  main:
+    - match: '\b(module)\s+([\p{L}_$][\p{L}0-9_$]*(?:\.[\p{L}_$][\p{L}0-9_$]*)*)'
+      captures:
+        1: variable.language.pkl
+        2: variable.other.module.pkl
+
+    - match: '(typealias)\s+([\p{L}_$][\p{L}0-9_$]*)\s*(=)\s*([\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??(?:\|\s*[\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??)*)'
+      captures:
+        1: keyword.class.pkl
+        2: entity.name.type.pkl
+        3: punctuation.pkl
+        4: entity.name.type.pkl
+
+    - match: '\b(class)\s+[\p{L}_$][\p{L}0-9_$]*'
+      scope: entity.name.type.pkl
+      captures:
+        1: keyword.class.pkl
+
+    - match: '\b(for)\s*\(([\p{L}_$][\p{L}0-9_$]*)(?:\s*,\s*([\p{L}_$][\p{L}0-9_$]*))*\s+(in)'
+      captures:
+        1: keyword.control.pkl
+        2: variable.other.property.pkl
+        3: variable.other.property.pkl
+        4: storage.modifier.pkl
+
+    - match: '\b(new)\s+([\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??(?:\|\s*[\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??)*)'
+      captures:
+        1: keyword.control.pkl
+        2: entity.name.type.pkl
+
+    - match: '\b(function)\s+([\p{L}_$][\p{L}0-9_$]*)'
+      captures:
+        1: keyword.pkl
+        2: variable.other.property.pkl
+
+    - match: '\b(as)\s+([\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??(?:\|\s*[\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??)*)'
+      captures:
+        1: keyword.pkl
+        2: entity.name.type.pkl
+
+    - match: '\b(true|false|null)\b'
+      scope: constant.character.language.pkl
+
+    - match: '//.*'
+      scope: comment.line.pkl
+
+    - match: '/\*'
+      push:
+        - meta_scope: comment.block.pkl
+        - match: '\*/'
+          pop: true
+
+    - match: '((?:\b|\s*)[\p{L}_$][\p{L}0-9_$]*|`[^`]+`)\s*(:)\s*([\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??(?:\|\s*[\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??)*)'
+      captures:
+        1: variable.other.property.pkl
+        2: punctuation.pkl
+        3: entity.name.type.pkl
+      push:
+        - match: '\s*=|,|\)|^[ \t]*$'
+          pop: true
+
+    - match: '(\b[\p{L}_$][\p{L}0-9_$]*|`[^`]+`)\s*(=)(?!=)'
+      captures:
+        1: variable.other.property.pkl
+        2: punctuation.pkl
+
+    - match: '(:)\s*([\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??(?:\|\s*[\p{L}_$][\p{L}0-9_$]*\s*(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*\??)*)'
+      captures:
+        1: punctuation.pkl
+        2: entity.name.type.pkl
+
+    - match: '^\s*([\p{L}_$][\p{L}0-9_$]*)\s*\{'
+      captures:
+        1: variable.other.property.pkl
+
+    - match: '\b(hidden|local|abstract|external|open|in|out|amends|extends|fixed|const)\b'
+      scope: storage.modifier.pkl
+
+    - match: '\b(amends|as|extends|function|is|let|read|read\?|import|throw|trace)\b'
+      scope: keyword.pkl
+
+    - match: '\b(if|else|when|for|import|new)\b'
+      scope: keyword.control.pkl
+
+    - match: '\b0x(?:[\da-fA-F][\da-fA-F_]*[\da-fA-F]|[\da-fA-F_])\b'
+      scope: constant.numeric.hex.pkl
+
+    - match: '\b0b(?:[0-1][0-1_]*[0-1]|[0-1])\b'
+      scope: constant.numeric.binary.pkl
+
+    - match: '\b0o(?:[0-7][0-7_]*[0-7]|[0-7])\b'
+      scope: constant.numeric.octal.pkl
+
+    - match: '\b(?:\d[0-9_]*\d|\d)\b'
+      scope: constant.numeric.decimal.pkl
+
+    - match: '\b(?:(?:\d[0-9_]*\d|\d)?\.(?:\d[0-9_]*\d|\d)(?:[eE][+-]?(?:\d[0-9_]*\d|\d))?|(?:\d[0-9_]*\d|\d)[eE][+-]?(?:\d[0-9_]*\d|\d))\b'
+      scope: constant.numeric.pkl
+
+    - match: '\+|-|\*\*|\*|~/|/|%|>=|>|<=|<|==|!=|!|&&|\|\||\|>|\?\?|!!|->|=|\|'
+      scope: keyword.operator.pkl
+
+    - match: '\b(this|module|outer|super)\b'
+      scope: variable.language.pkl
+
+    - match: '\b(unknown|never)\b'
+      scope: support.type.pkl
+
+    - match: '[(){}\[\]]'
+      scope: meta.brace.pkl
+
+    - match: '\b(class|typealias)\b'
+      scope: keyword.class.pkl
+
+    - match: '\.\?|\.|;|:'
+      scope: punctuation.pkl
+
+    - match: '@[\p{L}_$][\p{L}0-9_$]*'
+      scope: entity.name.type.pkl
+
+    - match: '(######""")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.triple.6.pkl
+        - match: '("""######)'
+          captures:
+            1: punctuation.delimiter.pkl
+          pop: true
+        - match: '\\######(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\######.)'
+          scope: constant.character.escape.6.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(######")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.double.6.pkl
+        - match: '("######)|(.?$)'
+          captures:
+            1: punctuation.delimimter.pkl
+            2: invalid.illegal.newline.pkl
+          pop: true
+        - match: '\\######(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\######.)'
+          scope: constant.character.escape.6.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(#####""")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.triple.5.pkl
+        - match: '("""#####)'
+          captures:
+            1: punctuation.delimiter.pkl
+          pop: true
+        - match: '\\#####(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\#####.)'
+          scope: constant.character.escape.5.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(#####")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.double.5.pkl
+        - match: '("#####)|(.?$)'
+          captures:
+            1: punctuation.delimimter.pkl
+            2: invalid.illegal.newline.pkl
+          pop: true
+        - match: '\\#####(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\#####.)'
+          scope: constant.character.escape.5.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(####""")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.triple.4.pkl
+        - match: '("""####)'
+          captures:
+            1: punctuation.delimiter.pkl
+          pop: true
+        - match: '\\####(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\####.)'
+          scope: constant.character.escape.4.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(####")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.double.4.pkl
+        - match: '("####)|(.?$)'
+          captures:
+            1: punctuation.delimimter.pkl
+            2: invalid.illegal.newline.pkl
+          pop: true
+        - match: '\\####(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\####.)'
+          scope: constant.character.escape.4.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(###""")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.triple.3.pkl
+        - match: '("""###)'
+          captures:
+            1: punctuation.delimiter.pkl
+          pop: true
+        - match: '\\###(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\###.)'
+          scope: constant.character.escape.3.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(###")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.double.3.pkl
+        - match: '("###)|(.?$)'
+          captures:
+            1: punctuation.delimimter.pkl
+            2: invalid.illegal.newline.pkl
+          pop: true
+        - match: '\\###(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\###.)'
+          scope: constant.character.escape.3.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(##""")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.triple.2.pkl
+        - match: '("""##)'
+          captures:
+            1: punctuation.delimiter.pkl
+          pop: true
+        - match: '\\##(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\##.)'
+          scope: constant.character.escape.2.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(##")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.double.2.pkl
+        - match: '("##)|(.?$)'
+          captures:
+            1: punctuation.delimimter.pkl
+            2: invalid.illegal.newline.pkl
+          pop: true
+        - match: '\\##(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\##.)'
+          scope: constant.character.escape.2.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(#""")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.triple.1.pkl
+        - match: '("""#)'
+          captures:
+            1: punctuation.delimiter.pkl
+          pop: true
+        - match: '\\#(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\#.)'
+          scope: constant.character.escape.1.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(#")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.double.1.pkl
+        - match: '("#)|(.?$)'
+          captures:
+            1: punctuation.delimimter.pkl
+            2: invalid.illegal.newline.pkl
+          pop: true
+        - match: '\\#(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\#.)'
+          scope: constant.character.escape.1.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(""")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.triple.0.pkl
+        - match: '(""")'
+          captures:
+            1: punctuation.delimiter.pkl
+          pop: true
+        - match: '\\(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\\.)'
+          scope: constant.character.escape.0.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl
+
+    - match: '(")'
+      captures:
+        1: punctuation.delimiter.pkl
+      push:
+        - meta_scope: string.quoted.double.0.pkl
+        - match: '(")|(.?$)'
+          captures:
+            1: punctuation.delimimter.pkl
+            2: invalid.illegal.newline.pkl
+          pop: true
+        - match: '\\(?:[trn"\\]|u\{[\da-fA-F]+\}|\(.+?\))|(\\\.)'
+          scope: constant.character.escape.0.pkl
+          captures:
+            1: invalid.illegal.unrecognized-string-escape.pkl

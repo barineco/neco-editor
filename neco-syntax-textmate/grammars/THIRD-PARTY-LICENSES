@@ -1,0 +1,29 @@
+This directory contains syntax definition files from third-party projects.
+Each file is used under its respective license.
+
+kdl.sublime-syntax
+  Source: https://github.com/eugenesvk/sublime-KDL
+  License: MIT
+  Note: Fallback syntax may be used if upstream is incompatible with syntect.
+
+fish.sublime-syntax
+  Source: https://github.com/Phidica/sublime-fish
+  License: MIT
+
+typst.sublime-syntax
+  Source: https://github.com/hyrious/typst-syntax-highlight
+  License: MIT
+
+nix.sublime-syntax
+  Source: https://github.com/sharkdp/bat (assets/syntaxes/)
+  License: MIT / Apache 2.0 (dual-licensed)
+
+pkl/pkl.sublime-syntax
+  Source: https://github.com/apple/pkl.tmbundle (Syntaxes/pkl.tmLanguage)
+  License: Apache 2.0
+  Note: Converted from plist XML to sublime-syntax format.
+
+mojo/mojo.sublime-syntax
+  Source: https://github.com/modular/vscode-mojo (syntaxes/mojo.syntax.json)
+  License: Apache 2.0
+  Note: Converted from tmLanguage JSON to sublime-syntax format.
