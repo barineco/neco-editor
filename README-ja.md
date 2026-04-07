@@ -20,6 +20,7 @@
 | [`neco-wrap`](./neco-wrap) | 等幅エディタ向けのソフトラップ行マップ | `neco-textview` | なし |
 | [`neco-history`](./neco-history) | ツリーベースの分岐を持つ汎用 undo/redo 履歴 | `neco-tree` (neco-crates) | なし |
 | [`neco-syntax-textmate`](./neco-syntax-textmate) | syntect ベースの TextMate 文法トークナイザ | なし | `syntect` |
+| [`neco-editor`](./neco-editor) | テキスト・装飾・折り返し・履歴・シンタックスを統合したエディタバッファ | 上記すべて | なし |
 
 各 crate は crates.io で個別公開できるよう、意図的に独立性を保っています。運用は monorepo 体制ですが、実行時に密結合する単一フレームワークではありません。
 

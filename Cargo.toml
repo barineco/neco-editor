@@ -10,6 +10,7 @@ members = [
     "neco-wrap",
     "neco-history",
     "neco-syntax-textmate",
+    "neco-editor",
 ]
 default-members = [
     "neco-pathrel",
@@ -22,5 +23,6 @@ default-members = [
     "neco-wrap",
     "neco-history",
     "neco-syntax-textmate",
+    "neco-editor",
 ]
 resolver = "2"
