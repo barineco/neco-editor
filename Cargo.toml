@@ -5,6 +5,7 @@ members = [
     "neco-textpatch",
     "neco-watchnorm",
     "neco-textview",
+    "neco-decor",
 ]
 default-members = [
     "neco-pathrel",
@@ -12,5 +13,6 @@ default-members = [
     "neco-textpatch",
     "neco-watchnorm",
     "neco-textview",
+    "neco-decor",
 ]
 resolver = "2"

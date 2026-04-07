@@ -1,0 +1,18 @@
+[package]
+name = "neco-decor"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Platform-agnostic decoration data model for text editor highlight, marker, and widget ranges"
+repository = "https://github.com/barineco/neco-editor"
+readme = "README.md"
+documentation = "https://docs.rs/neco-decor"
+keywords = ["decoration", "highlight", "marker", "editor", "range"]
+categories = ["text-processing", "data-structures"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+neco-textview = { version = "0.2", path = "../neco-textview" }
