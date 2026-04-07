@@ -1,0 +1,15 @@
+[package]
+name = "neco-textview"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Text position primitives: line/column ↔ byte offset, UTF-16 mapping, selection/caret model"
+repository = "https://github.com/barineco/neco-editor"
+readme = "README.md"
+documentation = "https://docs.rs/neco-textview"
+keywords = ["text", "position", "line", "offset", "editor"]
+categories = ["text-processing", "algorithms"]
+
+[lib]
+path = "src/lib.rs"

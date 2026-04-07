@@ -4,11 +4,13 @@ members = [
     "neco-filetree",
     "neco-textpatch",
     "neco-watchnorm",
+    "neco-textview",
 ]
 default-members = [
     "neco-pathrel",
     "neco-filetree",
     "neco-textpatch",
     "neco-watchnorm",
+    "neco-textview",
 ]
 resolver = "2"

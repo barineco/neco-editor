@@ -16,6 +16,7 @@ More crates may be added over time.
 | [`neco-filetree`](./neco-filetree) | pure file tree lookup, merge, flatten, and reveal helpers | `neco-pathrel` | none |
 | [`neco-textpatch`](./neco-textpatch) | deterministic narrow text patch helpers for small structured edits | none | none |
 | [`neco-watchnorm`](./neco-watchnorm) | host-agnostic file watcher event normalization and batch coalescing | none | none |
+| [`neco-textview`](./neco-textview) | line-indexed text buffer with efficient position/offset conversion | none | none |
 
 Each crate is intentionally independent so it can be published and consumed separately on crates.io. The repository is a monorepo for maintenance convenience, not a runtime-coupled framework.
 

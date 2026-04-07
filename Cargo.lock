@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "neco-filetree"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "neco-pathrel",
 ]
@@ -15,7 +15,11 @@ version = "0.1.1"
 
 [[package]]
 name = "neco-textpatch"
-version = "0.1.1"
+version = "0.1.2"
+
+[[package]]
+name = "neco-textview"
+version = "0.2.0"
 
 [[package]]
 name = "neco-watchnorm"

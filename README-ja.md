@@ -14,6 +14,7 @@
 | [`neco-filetree`](./neco-filetree) | ファイルツリーの探索、差し替え、平坦化、展開計画の補助 | `neco-pathrel` | なし |
 | [`neco-textpatch`](./neco-textpatch) | 小さな構造化テキスト更新向けの決定的パッチ補助 | なし | なし |
 | [`neco-watchnorm`](./neco-watchnorm) | ファイル監視イベントの正規化と一括統合 | なし | なし |
+| [`neco-textview`](./neco-textview) | 効率的な位置・オフセット変換を持つ行インデックス付きテキストバッファ | なし | なし |
 
 各 crate は crates.io で個別公開できるよう、意図的に独立性を保っています。運用は monorepo 体制ですが、実行時に密結合する単一フレームワークではありません。
 
