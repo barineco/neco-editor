@@ -1,0 +1,15 @@
+{
+  "name": "neco-editor",
+  "type": "module",
+  "version": "0.1.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "neco-editor-wasm": "file:../neco-editor-wasm/pkg"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

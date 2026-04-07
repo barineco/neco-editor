@@ -2,9 +2,9 @@
 
 [English](README.md)
 
-`neco editor` は、エディタランタイム向けのテキスト編集、ファイルツリー管理、ファイル監視イベント正規化を扱う Rust crate 群です。
+`neco editor` は、エディタランタイム構築向けの Rust crate 群と TypeScript パッケージです。低レベルのテキストバッファ・シンタックスハイライトから WebAssembly バインディングまでをカバーし、その上に DOM レンダリング担当のホスト非依存 TypeScript レイヤーを重ねた構成です。
 
-アプリケーション内で共通化していたエディタ側の基盤処理を、独立して再利用できる crate へ切り出しています。パス関係判定、インメモリのファイルツリー、小規模テキストパッチ、監視イベント統合など、それぞれが1つの責務に絞られており、crates.io で個別に利用可能です。
+アプリケーション内で共通化していたエディタ側の基盤処理を、独立して再利用できる単位へ切り出しています。それぞれが1つの責務に絞られており、crates.io で個別に利用可能です。
 
 ## crate 一覧
 
@@ -24,6 +24,12 @@
 | [`neco-editor-viewport`](./neco-editor-viewport) | 可視行範囲・キャレット矩形・選択矩形・ヒットテスト向けピクセルジオメトリ補助 | `neco-textview`, `neco-wrap` | なし |
 | [`neco-editor-search`](./neco-editor-search) | バッファ検索エンジン（プレーンテキスト、正規表現、単語単位） | `neco-textview` | `regex` |
 | [`neco-editor-wasm`](./neco-editor-wasm) | `EditorHandle` を不透明な WASM エクスポートとして公開する wasm-bindgen バインディング | `neco-editor`, `neco-editor-viewport`, `neco-editor-search`, `neco-syntax-textmate` | `wasm-bindgen`, `js-sys` |
+
+## npm パッケージ
+
+| パッケージ | 概要 |
+|---|---|
+| [`neco-editor-ts`](./neco-editor-ts) | `neco-editor-wasm` をラップするホスト非依存 TypeScript API。`EditorSession`（WASM 計算レイヤー）と `EditorView`（DOM レンダリング・入力処理・仮想スクロール）を提供する。 |
 
 各 crate は crates.io で個別公開できるよう、意図的に独立性を保っています。運用は monorepo 体制ですが、実行時に密結合する単一フレームワークではありません。
 

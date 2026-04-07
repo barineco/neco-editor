@@ -2,11 +2,9 @@
 
 [日本語](README-ja.md)
 
-`neco editor` is a set of Rust crates for text editing, file tree management, and file watcher event normalization in editor runtimes.
+`neco editor` is a set of Rust crates and a TypeScript package for building editor runtimes. The crates cover everything from low-level text buffers and syntax highlighting to WebAssembly bindings, with a host-agnostic TypeScript layer on top for DOM rendering.
 
-This repository collects editor-side primitives that were factored out of an application codebase into independently publishable crates. Each crate handles one narrow concern — path relation logic, in-memory file trees, small text patches, or watcher event coalescing — so they can be consumed separately on crates.io.
-
-More crates may be added over time.
+This repository collects editor-side primitives that were factored out of an application codebase into independently publishable units. Each crate handles one narrow concern so they can be consumed separately on crates.io.
 
 ## Crates
 
@@ -27,7 +25,13 @@ More crates may be added over time.
 | [`neco-editor-search`](./neco-editor-search) | buffer search engine (plain text, regex, whole-word) | `neco-textview` | `regex` |
 | [`neco-editor-wasm`](./neco-editor-wasm) | wasm-bindgen bindings exposing `EditorHandle` as an opaque WASM export | `neco-editor`, `neco-editor-viewport`, `neco-editor-search`, `neco-syntax-textmate` | `wasm-bindgen`, `js-sys` |
 
-Each crate is intentionally independent so it can be published and consumed separately on crates.io. The repository is a monorepo for maintenance convenience, not a runtime-coupled framework.
+## npm package
+
+| Package | Summary |
+|---|---|
+| [`neco-editor-ts`](./neco-editor-ts) | host-agnostic TypeScript API wrapping `neco-editor-wasm`. Provides `EditorSession` (WASM compute layer) and `EditorView` (DOM rendering, input handling, virtual scroll). |
+
+Each crate is intentionally independent so it can be published and consumed separately on crates.io. The repository is a maintenance monorepo; each crate stands on its own as a library.
 
 This repository is still under active development, and crates vary in maturity. Some parts are already usable, while others are still being hardened or reshaped.
 

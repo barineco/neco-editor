@@ -191,7 +191,7 @@ dependencies = [
  "neco-pathrel",
  "neco-textpatch",
  "neco-textview",
- "neco-tree",
+ "neco-tree 0.1.0",
  "neco-watchnorm",
  "neco-wrap",
 ]
@@ -236,7 +236,7 @@ name = "neco-history"
 version = "0.1.0"
 dependencies = [
  "neco-textpatch",
- "neco-tree",
+ "neco-tree 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -257,6 +257,10 @@ version = "0.1.2"
 [[package]]
 name = "neco-textview"
 version = "0.2.0"
+
+[[package]]
+name = "neco-tree"
+version = "0.1.0"
 
 [[package]]
 name = "neco-tree"
