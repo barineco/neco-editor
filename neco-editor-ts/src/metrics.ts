@@ -26,15 +26,24 @@ export function measureCharWidth(
 /**
  * Compute line height from a container element's computed style.
  *
+ * Handles both pixel values ("21px") and unitless multipliers ("1.5"):
+ * - "21px" → returned as 21
+ * - "1.5"  → returned as Math.round(1.5 * fontSize)
+ *
  * Falls back to `fontSize * DEFAULT_LINE_HEIGHT_RATIO` when the
- * computed lineHeight is 'normal' or otherwise not a pixel value.
+ * computed lineHeight is 'normal' or otherwise unparseable.
  */
 export function resolveLineHeight(container: HTMLElement, fontSize: number): number {
   const computed = getComputedStyle(container).lineHeight
   if (computed && computed !== 'normal') {
     const parsed = parseFloat(computed)
     if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed
+      // Pixel value: use as-is.
+      if (computed.endsWith('px')) {
+        return parsed
+      }
+      // Unitless multiplier: scale by fontSize.
+      return Math.round(parsed * fontSize)
     }
   }
   return Math.round(fontSize * DEFAULT_LINE_HEIGHT_RATIO)

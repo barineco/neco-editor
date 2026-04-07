@@ -10,7 +10,7 @@ export interface RendererOptions {
 /**
  * DOM renderer for the neco-editor.
  *
- * Converts `RenderLine[]` into a gutter + content DOM structure,
+ * Converts `RenderLine[]` into a per-line gutter cell + content cell structure,
  * and provides overlay layers for the caret and selections.
  *
  * Current implementation replaces all children on each `renderLines` call
@@ -22,7 +22,7 @@ export class Renderer {
   private options: RendererOptions
 
   // Persistent top-level elements
-  private gutterEl: HTMLElement
+  private gutterBgEl: HTMLElement
   private contentEl: HTMLElement
   private linesEl: HTMLElement
   private caretEl: HTMLElement
@@ -32,15 +32,15 @@ export class Renderer {
     this.container = container
     this.options = options
 
-    // -- gutter ---------------------------------------------------------------
-    this.gutterEl = document.createElement('div')
-    this.gutterEl.className = 'neco-editor-gutter'
-    this.gutterEl.style.width = `${options.gutterWidth}px`
+    // -- gutter background ----------------------------------------------------
+    // gutterBgEl is a visual-only column; width is driven by --neco-gutter-width.
+    this.gutterBgEl = document.createElement('div')
+    this.gutterBgEl.className = 'neco-editor-gutter-bg'
 
     // -- content area ---------------------------------------------------------
+    // contentEl starts at left:0; per-line gutter cells occupy the left portion.
     this.contentEl = document.createElement('div')
     this.contentEl.className = 'neco-editor-content'
-    this.contentEl.style.left = `${options.gutterWidth}px`
 
     this.linesEl = document.createElement('div')
     this.linesEl.className = 'neco-editor-lines'
@@ -56,17 +56,16 @@ export class Renderer {
     this.contentEl.appendChild(this.caretEl)
     this.contentEl.appendChild(this.selectionLayer)
 
-    // Apply optional padding
+    // Apply optional padding to contentEl
     const padTop = options.padding?.top ?? 0
     const padBottom = options.padding?.bottom ?? 0
-    if (padTop > 0) {
-      this.contentEl.style.paddingTop = `${padTop}px`
-    }
-    if (padBottom > 0) {
-      this.contentEl.style.paddingBottom = `${padBottom}px`
-    }
+    if (padTop > 0) this.contentEl.style.paddingTop = `${padTop}px`
+    if (padBottom > 0) this.contentEl.style.paddingBottom = `${padBottom}px`
 
-    container.appendChild(this.gutterEl)
+    // Set the CSS variable so gutterBgEl and per-line gutter cells share the same width.
+    container.style.setProperty('--neco-gutter-width', `${options.gutterWidth}px`)
+
+    container.appendChild(this.gutterBgEl)
     container.appendChild(this.contentEl)
   }
 
@@ -77,74 +76,89 @@ export class Renderer {
   /**
    * Render visible lines into the DOM.
    *
-   * Replaces the entire gutter and line content (full rebuild).
+   * Each .neco-line contains a gutter cell and a content cell.
    * `currentLineNumber` is the 1-based line number that should be highlighted
    * as the current cursor line.
    */
   renderLines(lines: RenderLine[], currentLineNumber: number): void {
-    // -- gutter ---------------------------------------------------------------
-    this.gutterEl.textContent = ''
-    if (this.options.showLineNumbers) {
-      for (const line of lines) {
-        const numEl = document.createElement('div')
-        numEl.className = 'neco-line-number'
-        if (line.lineNumber === currentLineNumber) {
-          numEl.classList.add('neco-current-line')
-        }
-        numEl.textContent = String(line.lineNumber)
-        this.gutterEl.appendChild(numEl)
-      }
-    }
-
-    // -- lines ----------------------------------------------------------------
     this.linesEl.textContent = ''
     for (const line of lines) {
       const lineEl = document.createElement('div')
       lineEl.className = 'neco-line'
 
-      if (line.tokens.length === 0) {
-        // Empty line – the div stays empty; CSS ensures the correct height.
-        this.linesEl.appendChild(lineEl)
-        continue
+      // Gutter cell
+      if (this.options.showLineNumbers) {
+        const gutterCell = document.createElement('span')
+        gutterCell.className = 'neco-line-gutter-cell'
+        if (line.lineNumber === currentLineNumber) {
+          gutterCell.classList.add('neco-current-line')
+        }
+        gutterCell.textContent = String(line.lineNumber)
+        lineEl.appendChild(gutterCell)
       }
 
-      // Walk through tokens, filling gaps with plain spans.
-      let cursor = 0
-      for (const token of line.tokens) {
-        // Fill gap before this token (if any) with a plain span.
-        if (token.start > cursor) {
-          const gapSpan = document.createElement('span')
-          gapSpan.className = tokenKindToClass('plain')
-          gapSpan.textContent = line.text.substring(cursor, token.start)
-          lineEl.appendChild(gapSpan)
+      // Content cell
+      const contentCell = document.createElement('span')
+      contentCell.className = 'neco-line-content-cell'
+      if (line.lineNumber === currentLineNumber) {
+        contentCell.classList.add('neco-current-line')
+      }
+
+      if (line.tokens.length === 0) {
+        if (line.text.length > 0) {
+          const span = document.createElement('span')
+          span.className = tokenKindToClass('plain')
+          span.textContent = line.text
+          contentCell.appendChild(span)
+        }
+      } else {
+        // Walk through tokens, filling gaps with plain spans.
+        let cursor = 0
+        for (const token of line.tokens) {
+          // Fill gap before this token (if any) with a plain span.
+          if (token.start > cursor) {
+            const gapSpan = document.createElement('span')
+            gapSpan.className = tokenKindToClass('plain')
+            gapSpan.textContent = line.text.substring(cursor, token.start)
+            contentCell.appendChild(gapSpan)
+          }
+
+          const span = document.createElement('span')
+          span.className = tokenKindToClass(token.kind)
+          span.textContent = line.text.substring(token.start, token.end)
+          contentCell.appendChild(span)
+
+          cursor = token.end
         }
 
-        const span = document.createElement('span')
-        span.className = tokenKindToClass(token.kind)
-        span.textContent = line.text.substring(token.start, token.end)
-        lineEl.appendChild(span)
-
-        cursor = token.end
+        // Fill trailing gap after the last token.
+        if (cursor < line.text.length) {
+          const tailSpan = document.createElement('span')
+          tailSpan.className = tokenKindToClass('plain')
+          tailSpan.textContent = line.text.substring(cursor)
+          contentCell.appendChild(tailSpan)
+        }
       }
 
-      // Fill trailing gap after the last token.
-      if (cursor < line.text.length) {
-        const tailSpan = document.createElement('span')
-        tailSpan.className = tokenKindToClass('plain')
-        tailSpan.textContent = line.text.substring(cursor)
-        lineEl.appendChild(tailSpan)
-      }
-
+      lineEl.appendChild(contentCell)
       this.linesEl.appendChild(lineEl)
     }
   }
 
   /** Position the caret element at the given pixel rect. */
   renderCaret(rect: Rect): void {
+    const moved =
+      this.caretEl.style.left !== `${rect.x}px` ||
+      this.caretEl.style.top !== `${rect.y}px`
     this.caretEl.style.left = `${rect.x}px`
     this.caretEl.style.top = `${rect.y}px`
     this.caretEl.style.width = `${rect.width}px`
     this.caretEl.style.height = `${rect.height}px`
+    if (moved) {
+      this.caretEl.style.animation = 'none'
+      this.caretEl.offsetHeight // force reflow
+      this.caretEl.style.animation = ''
+    }
   }
 
   /** Render selection highlight rectangles (one per visual line). */
@@ -162,11 +176,10 @@ export class Renderer {
     }
   }
 
-  /** Update the gutter column width (e.g. when line count changes digits). */
+  /** Update the gutter column width via CSS variable (gutterBgEl and gutter cells both reference it). */
   updateGutterWidth(width: number): void {
     this.options.gutterWidth = width
-    this.gutterEl.style.width = `${width}px`
-    this.contentEl.style.left = `${width}px`
+    this.container.style.setProperty('--neco-gutter-width', `${width}px`)
   }
 
   /** Return the content container element (used as scroll container). */
@@ -179,11 +192,6 @@ export class Renderer {
     return this.linesEl
   }
 
-  /** Return the gutter element. */
-  getGutterElement(): HTMLElement {
-    return this.gutterEl
-  }
-
   /** Return the current pixel size of the content area. */
   getContentRect(): { width: number; height: number } {
     return {
@@ -194,7 +202,6 @@ export class Renderer {
 
   /** Remove all rendered content while keeping the structural elements. */
   clear(): void {
-    this.gutterEl.textContent = ''
     this.linesEl.textContent = ''
     this.selectionLayer.textContent = ''
     this.caretEl.style.left = '0px'
@@ -206,7 +213,8 @@ export class Renderer {
   /** Detach all DOM elements from the container and release references. */
   dispose(): void {
     this.clear()
-    this.container.removeChild(this.gutterEl)
+    this.container.removeChild(this.gutterBgEl)
     this.container.removeChild(this.contentEl)
+    this.container.style.removeProperty('--neco-gutter-width')
   }
 }

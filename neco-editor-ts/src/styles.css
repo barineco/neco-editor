@@ -4,6 +4,7 @@
 
 /* --- CSS custom properties (design tokens) --- */
 .neco-editor {
+  --neco-gutter-width: 0px;  /* updated dynamically by JS */
   --neco-editor-bg: var(--editor-bg, #1e1e1e);
   --neco-editor-fg: var(--editor-fg, #d4d4d4);
   --neco-gutter-bg: var(--editor-gutter, #1e1e1e);
@@ -35,6 +36,7 @@
 .neco-editor {
   position: relative;
   overflow: hidden;
+  height: 100%;
   font-family: 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
   font-size: 14px;
   line-height: 1.5;
@@ -44,26 +46,18 @@
   contain: layout style;
 }
 
-/* --- Gutter (line numbers) --- */
-.neco-editor-gutter {
+/* --- Gutter background column (visual only, no scroll interaction) --- */
+.neco-editor-gutter-bg {
   position: absolute;
   top: 0;
   left: 0;
-  height: 100%;
-  overflow: hidden;
+  bottom: 0;
+  width: var(--neco-gutter-width);
   background: var(--neco-gutter-bg);
-  color: var(--neco-gutter-fg);
   border-right: 1px solid var(--neco-gutter-border);
-  text-align: right;
-  user-select: none;
   pointer-events: none;
+  z-index: 0;
   box-sizing: border-box;
-}
-
-.neco-line-number {
-  display: block;
-  padding: 0 8px 0 0;
-  white-space: nowrap;
 }
 
 /* --- Content area (scroll container) --- */
@@ -74,6 +68,7 @@
   right: 0;
   bottom: 0;
   overflow: auto;
+  z-index: 1;  /* above gutter background */
 }
 
 /* --- Virtual scroll spacer --- */
@@ -82,11 +77,41 @@
   pointer-events: none;
 }
 
+/* --- Lines container (virtual scroll; only spacer provides layout height) --- */
+.neco-editor-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 0;  /* below caret/selection within contentEl */
+  /* transform: translateY is set inline by JS */
+}
+
 /* --- Lines --- */
 .neco-line {
   position: relative;
-  white-space: pre;
+  display: flex;
   height: calc(1em * 1.5);
+}
+
+/* --- Per-line gutter cell (number inside each line) --- */
+.neco-line-gutter-cell {
+  width: var(--neco-gutter-width);
+  flex-shrink: 0;
+  padding: 0 8px 0 0;
+  text-align: right;
+  color: var(--neco-gutter-fg);
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+/* --- Per-line content cell (text tokens) --- */
+.neco-line-content-cell {
+  flex: 1;
+  white-space: pre;
+  min-width: 0;  /* allow flex shrink to avoid overflow */
 }
 
 /* --- Current-line highlight --- */
@@ -101,12 +126,29 @@
   pointer-events: none;
 }
 
+/* z-index hierarchy within contentEl:
+   - linesEl (z: 0): rendered text and gutter cells
+   - selectionLayer (z: 1): selection rectangles below caret
+   - caretEl (z: 2): cursor on top
+   Note: z-index only applies to positioned elements; the layer itself must
+   be absolutely positioned so its z-index is honored. */
+.neco-selection-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* --- Cursor --- */
 .neco-cursor {
   position: absolute;
   width: 2px;
   background: var(--neco-cursor-color);
   pointer-events: none;
+  z-index: 2;
   animation: neco-cursor-blink 1s step-end infinite;
 }
 

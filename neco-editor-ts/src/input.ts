@@ -67,7 +67,7 @@ export class InputHandler {
   private handleInput: (e: Event) => void
 
   constructor(
-    private container: HTMLElement,
+    _container: HTMLElement,
     private onCommand: (cmd: InputCommand) => void,
   ) {
     // Create and style the hidden textarea
@@ -96,8 +96,8 @@ export class InputHandler {
       // but visually hidden. Avoid display:none which prevents focus.
       pointerEvents: 'none',
     })
-    container.style.position = container.style.position || 'relative'
-    container.appendChild(this.textarea)
+    _container.style.position = _container.style.position || 'relative'
+    _container.appendChild(this.textarea)
 
     // --- Event handlers ---------------------------------------------------
 

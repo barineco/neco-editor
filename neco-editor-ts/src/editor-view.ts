@@ -7,6 +7,7 @@ import { MouseHandler, type MouseCommand } from './mouse'
 import { wordBoundary } from './mouse'
 import { ClipboardHandler, type ClipboardCallbacks } from './clipboard'
 import type { RangeChange, Rect, SearchMatchInfo, SearchOptions } from './types'
+import { CoordinateMap, docY, toViewY } from './coordinates'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -190,7 +191,12 @@ export class EditorView {
     this.mouseHandler = new MouseHandler(
       this.container,
       {
-        hitTest: (x, y) => this.session.hitTest(x, y, this.scrollManager.getScrollState().scrollTop),
+        hitTest: (x, y) => {
+          // x: ContX (container-relative), y: ViewY (viewport-relative, after mouse.ts fix)
+          const gw = (this.options.lineNumbers !== false) ? this.session.getGutterWidth() : 0
+          // WASM hit_test expects: x=DocX (content-relative), y=ViewY, scroll_top
+          return this.session.hitTest(x - gw, y, this.scrollManager.getScrollState().scrollTop)
+        },
         getScrollTop: () => this.scrollManager.getScrollState().scrollTop,
         getText: () => this.session.getText(),
       },
@@ -358,15 +364,26 @@ export class EditorView {
 
   revealOffset(offset: number): void {
     const caretRect = this.session.getCaretRect(offset)
-    const newScrollTop = this.scrollManager.scrollToReveal(caretRect.y, caretRect.height)
+    const padTop = this.options.padding?.top ?? 0
+    const padBottom = this.options.padding?.bottom ?? 0
+    // Convert DocY to scroll-container space (caretEl is at DocY + padTop within contentEl).
+    // Inflate caret height by padBottom so the cursor stays above the bottom padding zone
+    // when scrolling to reveal (otherwise the cursor lands at the very bottom edge or
+    // clips into the bottom padding due to browser scrollHeight quirks).
+    const newScrollTop = this.scrollManager.scrollToReveal(
+      caretRect.y + padTop,
+      caretRect.height + padBottom,
+    )
     if (newScrollTop !== null) {
       this.scrollManager.setScrollTop(newScrollTop)
     }
   }
 
   revealLine(line: number): void {
-    const targetY = (line - 1) * this.lineHeight
-    const newScrollTop = this.scrollManager.scrollToReveal(targetY, this.lineHeight)
+    const padTop = this.options.padding?.top ?? 0
+    const padBottom = this.options.padding?.bottom ?? 0
+    const targetY = (line - 1) * this.lineHeight + padTop
+    const newScrollTop = this.scrollManager.scrollToReveal(targetY, this.lineHeight + padBottom)
     if (newScrollTop !== null) {
       this.scrollManager.setScrollTop(newScrollTop)
     }
@@ -602,6 +619,7 @@ export class EditorView {
   // =========================================================================
 
   private handleMouseCommand(cmd: MouseCommand): void {
+    this.inputHandler.focus()
     switch (cmd.type) {
       case 'setCursor':
         this.setCursor(cmd.offset)
@@ -708,13 +726,13 @@ export class EditorView {
         break
       case 'up':
       case 'down': {
-        // Use getCaretRect to find current position, then move up/down by lineHeight
         const caretRect = this.session.getCaretRect(this.cursorOffset)
-        const targetY = direction === 'up'
+        const targetDocY = docY(direction === 'up'
           ? caretRect.y - this.lineHeight
-          : caretRect.y + this.lineHeight
+          : caretRect.y + this.lineHeight)
         const scrollTop = this.scrollManager.getScrollState().scrollTop
-        newOffset = this.session.hitTest(caretRect.x, targetY, scrollTop)
+        // WASM expects ViewY; convert DocY → ViewY
+        newOffset = this.session.hitTest(caretRect.x, toViewY(targetDocY, scrollTop) as number, scrollTop)
         break
       }
       default:
@@ -769,9 +787,9 @@ export class EditorView {
     const linesPerPage = Math.max(1, Math.floor(containerHeight / this.lineHeight))
     const caretRect = this.session.getCaretRect(this.cursorOffset)
     const delta = direction === 'up' ? -linesPerPage : linesPerPage
-    const targetY = caretRect.y + delta * this.lineHeight
+    const targetDocY = docY(caretRect.y + delta * this.lineHeight)
     const scrollTop = this.scrollManager.getScrollState().scrollTop
-    const newOffset = this.session.hitTest(caretRect.x, targetY, scrollTop)
+    const newOffset = this.session.hitTest(caretRect.x, toViewY(targetDocY, scrollTop) as number, scrollTop)
     this.moveCursorTo(newOffset, extend)
 
     // Also scroll the viewport by the same amount
@@ -816,6 +834,13 @@ export class EditorView {
 
   private render(): void {
     const scrollState = this.scrollManager.getScrollState()
+    const padTop = this.options.padding?.top ?? 0
+    const coords = new CoordinateMap({
+      gutterWidth: (this.options.lineNumbers !== false) ? this.session.getGutterWidth() : 0,
+      scrollTop: scrollState.scrollTop,
+      padTop,
+      lineHeight: this.lineHeight,
+    })
     const contentRect = this.renderer.getContentRect()
     const height = contentRect.height > 0 ? contentRect.height : this.container.getBoundingClientRect().height
 
@@ -828,14 +853,12 @@ export class EditorView {
     // Get visible lines from session using the computed visible range
     const lines = this.session.getVisibleLines(visibleTop, effectiveHeight)
 
-    // Apply translateY to the lines container so that only the visible
-    // subset is positioned correctly within the scrollable area.
+    // linesEl is inside scrollable contentEl.
+    // translateY(offsetY) places rendered lines at their document-space Y position.
+    // The browser's native scrollTop handles the viewport offset.
+    // Gutter cells are inside each .neco-line, so they move in lock-step automatically.
     const linesEl = this.renderer.getLinesElement()
     linesEl.style.transform = `translateY(${scrollState.offsetY}px)`
-
-    // Sync gutter scroll with content scroll
-    const gutterEl = this.renderer.getGutterElement()
-    gutterEl.style.transform = `translateY(${scrollState.offsetY}px)`
 
     // Determine current line number from cursor
     let caretRect: Rect | null = null
@@ -853,11 +876,15 @@ export class EditorView {
     // Render lines
     this.renderer.renderLines(lines, currentLineNumber)
 
-    // Render caret (adjust for scroll)
+    // Render caret.
+    // WASM caret_rect returns x in content-relative space (0 = start of text column).
+    // contentEl now spans full editor width (left: 0), so we shift caret x by gutterWidth
+    // to paint it to the right of the gutter cell.
+    const gutterWidth = coords.gutterWidth
     if (caretRect) {
       const adjustedCaret: Rect = {
-        x: caretRect.x,
-        y: caretRect.y - scrollState.scrollTop,
+        x: caretRect.x + gutterWidth,
+        y: coords.docToAbsoluteY(docY(caretRect.y)),
         width: caretRect.width,
         height: caretRect.height,
       }
@@ -866,13 +893,12 @@ export class EditorView {
       this.renderer.renderCaret({ x: 0, y: 0, width: 0, height: 0 })
     }
 
-    // Render selections
+    // Render selections (same content-space → container-space shift as caret)
     if (this.selectionAnchor !== null && this.selectionAnchor !== this.cursorOffset) {
       const selRects = this.session.getSelectionRects(this.selectionAnchor, this.cursorOffset)
-      // Adjust for scroll
       const adjustedSelRects = selRects.map((r) => ({
-        x: r.x,
-        y: r.y - scrollState.scrollTop,
+        x: r.x + gutterWidth,
+        y: coords.docToAbsoluteY(docY(r.y)),
         width: r.width,
         height: r.height,
       }))
@@ -911,6 +937,10 @@ export class EditorView {
       if (text[i] === '\n') count++
     }
     this.scrollManager.setTotalLines(count)
+    // Update gutter width: line-number digit count may have changed.
+    if (this.options.lineNumbers !== false) {
+      this.renderer.updateGutterWidth(this.session.getGutterWidth())
+    }
   }
 
   // -- Focus handlers (bound as arrow functions for stable identity) --------
@@ -941,11 +971,11 @@ function findWordBoundaryLeft(text: string, offset: number): number {
   if (offset <= 0) return 0
   let pos = offset - 1
   // Skip non-word characters
-  while (pos > 0 && !WORD_RE.test(text[pos])) {
+  while (pos > 0 && !WORD_RE.test(text.charAt(pos))) {
     pos--
   }
   // Skip word characters
-  while (pos > 0 && WORD_RE.test(text[pos - 1])) {
+  while (pos > 0 && WORD_RE.test(text.charAt(pos - 1))) {
     pos--
   }
   return pos
@@ -956,11 +986,11 @@ function findWordBoundaryRight(text: string, offset: number): number {
   if (offset >= len) return len
   let pos = offset
   // Skip word characters
-  while (pos < len && WORD_RE.test(text[pos])) {
+  while (pos < len && WORD_RE.test(text.charAt(pos))) {
     pos++
   }
   // Skip non-word characters
-  while (pos < len && !WORD_RE.test(text[pos])) {
+  while (pos < len && !WORD_RE.test(text.charAt(pos))) {
     pos++
   }
   return pos

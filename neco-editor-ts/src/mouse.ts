@@ -43,15 +43,15 @@ const WORD_CHAR = /\w/
  * `[offset, offset]` (zero-width).
  */
 export function wordBoundary(text: string, offset: number): [start: number, end: number] {
-  if (offset < 0 || offset >= text.length || !WORD_CHAR.test(text[offset])) {
+  if (offset < 0 || offset >= text.length || !WORD_CHAR.test(text.charAt(offset))) {
     return [offset, offset]
   }
   let start = offset
-  while (start > 0 && WORD_CHAR.test(text[start - 1])) {
+  while (start > 0 && WORD_CHAR.test(text.charAt(start - 1))) {
     start--
   }
   let end = offset
-  while (end < text.length && WORD_CHAR.test(text[end])) {
+  while (end < text.length && WORD_CHAR.test(text.charAt(end))) {
     end++
   }
   return [start, end]
@@ -169,8 +169,8 @@ export class MouseHandler {
    */
   private offsetFromEvent(e: MouseEvent): number {
     const rect = this.container.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top + this.callbacks.getScrollTop()
+    const x = e.clientX - rect.left   // ContX
+    const y = e.clientY - rect.top     // ContY (≈ ViewY for content area)
     return this.callbacks.hitTest(x, y)
   }
 

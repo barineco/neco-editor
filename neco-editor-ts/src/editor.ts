@@ -6,7 +6,6 @@ import type {
   SearchMatchInfo,
   IndentInfo,
   BracketPair,
-  EditorError,
   SearchOptions,
   TokenSpan,
 } from './types'
@@ -130,14 +129,12 @@ export class EditorSession {
 
   // -- Auto-indent -----------------------------------------------------------
 
-  /** Returns the leading whitespace of the line containing `offset`. */
   autoIndent(offset: number): string {
     return this.handle.autoIndent(offset)
   }
 
   // -- Auto close bracket ----------------------------------------------------
 
-  /** Returns the closing bracket/quote char code for an opening one, or null. */
   autoCloseBracket(ch: number): number | null {
     const result = this.handle.autoCloseBracket(ch)
     if (result === null || result === undefined) return null
@@ -146,14 +143,12 @@ export class EditorSession {
 
   // -- Paste indent adjustment -----------------------------------------------
 
-  /** Adjusts indentation of pasted text. Currently returns input unchanged. */
   adjustPasteIndent(text: string, offset: number): string {
     return this.handle.adjustPasteIndent(text, offset)
   }
 
   // -- Bracket matching ------------------------------------------------------
 
-  /** Finds the matching bracket at `offset`. Returns pair or null. */
   findMatchingBracket(offset: number): BracketPair | null {
     const result = this.handle.findMatchingBracket(offset)
     if (result === null || result === undefined) return null

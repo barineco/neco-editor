@@ -154,6 +154,7 @@ export class ScrollManager {
   // ---- Internals -----------------------------------------------------------
 
   private handleScroll(): void {
+    // Listeners are batched via rAF for content-rebuild work.
     if (this.rafId !== null) return
     this.rafId = requestAnimationFrame(() => {
       this.rafId = null

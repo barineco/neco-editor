@@ -589,7 +589,7 @@ fn compute_layout(handle: &EditorHandle) -> ViewportLayout {
     );
     ViewportLayout {
         gutter_width: gw,
-        content_left: gw + handle.viewport_metrics.char_width,
+        content_left: 0.0,
     }
 }
 
@@ -619,15 +619,21 @@ fn get_visible_lines_value(handle: &mut EditorHandle, scroll_top: f64, height: f
         };
 
     let text = handle.buffer.text();
+    let text_len = text.len();
     let line_count = handle.buffer.line_index().line_count();
     let arr = Array::new();
 
     for log_line in tokenize_from..line_count {
-        let line_range = handle
-            .buffer
-            .line_index()
-            .line_range(log_line)
-            .expect("line_range within line_count is infallible");
+        // Defensive: skip out-of-range lines instead of panicking with expect.
+        // This guards against any transient inconsistency between line_count and
+        // line_range or text bounds, keeping the WASM module in a usable state.
+        let line_range = match handle.buffer.line_index().line_range(log_line) {
+            Ok(r) => r,
+            Err(_) => break,
+        };
+        if line_range.start() > text_len || line_range.end() > text_len {
+            break;
+        }
         let line_text = &text[line_range.start()..line_range.end()];
 
         let tokens = if let Some(ref mut hl) = handle.highlighter {
@@ -767,6 +773,16 @@ mod tests {
 
     fn make_handle(text: &str) -> EditorHandle {
         EditorHandle::new(text, "rust", 20.0, 8.0, 4)
+    }
+
+    fn auto_close_bracket_value(_handle: &EditorHandle, ch: u32) -> Option<u32> {
+        let c = char::from_u32(ch)?;
+        neco_editor::auto_close_bracket(c).map(|close| close as u32)
+    }
+
+    fn find_matching_bracket_value(handle: &EditorHandle, offset: u32) -> Option<(usize, usize)> {
+        neco_editor::find_matching_bracket(handle.buffer.text(), offset as usize)
+            .map(|pair| (pair.open(), pair.close()))
     }
 
     // -- Basic construction and getText -------------------------------------
@@ -1055,17 +1071,4 @@ mod tests {
         let h = make_handle("hello");
         assert_eq!(h.adjust_paste_indent("  pasted", 0), "  pasted");
     }
-}
-
-// Test helpers for pure-Rust validation of WASM methods.
-#[cfg(test)]
-fn auto_close_bracket_value(_handle: &EditorHandle, ch: u32) -> Option<u32> {
-    let c = char::from_u32(ch)?;
-    neco_editor::auto_close_bracket(c).map(|close| close as u32)
-}
-
-#[cfg(test)]
-fn find_matching_bracket_value(handle: &EditorHandle, offset: u32) -> Option<(usize, usize)> {
-    neco_editor::find_matching_bracket(handle.buffer.text(), offset as usize)
-        .map(|pair| (pair.open(), pair.close()))
 }

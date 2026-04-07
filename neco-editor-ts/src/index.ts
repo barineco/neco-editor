@@ -13,3 +13,5 @@ export type {
   SearchOptions,
 } from './types'
 export type { EditorViewOptions, EditorViewState, Disposable } from './editor-view'
+export { CoordinateMap, docX, docY, viewY, contX, contY, toViewY } from './coordinates'
+export type { DocX, DocY, ViewY, ContX, ContY, LayoutParams } from './coordinates'
