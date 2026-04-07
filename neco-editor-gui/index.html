@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neco Editor</title>
+    <link rel="stylesheet" href="/src/app.css" />
+  </head>
+  <body>
+    <div id="toolbar">
+      <button id="open-btn">Open…</button>
+      <button id="save-btn">Save</button>
+      <span id="file-path">untitled</span>
+      <span id="lang-indicator">plain</span>
+    </div>
+    <div id="editor"></div>
+    <div id="status-bar">
+      <span id="cursor-pos">1:1</span>
+      <span id="file-dirty"></span>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

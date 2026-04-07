@@ -1,0 +1,19 @@
+[workspace]
+
+[package]
+name = "neco-editor-gui"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone Tauri harness for neco-editor"
+
+[lib]
+name = "neco_editor_gui_lib"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,21 @@
+{
+  "name": "neco-editor-gui",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "neco-editor": "file:../neco-editor-ts",
+    "neco-editor-wasm": "file:../neco-editor-wasm/pkg"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/cli": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0"
+  }
+}

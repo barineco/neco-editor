@@ -31,6 +31,14 @@ This repository collects editor-side primitives that were factored out of an app
 |---|---|
 | [`neco-editor-ts`](./neco-editor-ts) | host-agnostic TypeScript API wrapping `neco-editor-wasm`. Provides `EditorSession` (WASM compute layer) and `EditorView` (DOM rendering, input handling, virtual scroll). |
 
+## Demo apps
+
+Applications used for runtime verification. Not published to crates.io or npm, and not part of the editor runtime dependencies.
+
+| App | Summary |
+|---|---|
+| [`neco-editor-gui`](./neco-editor-gui) | standalone desktop app mounting `neco-editor-ts` in a Tauri v2 window. Framework-less Vite + TypeScript frontend for exercising `EditorView` in isolation |
+
 Each crate is intentionally independent so it can be published and consumed separately on crates.io. The repository is a maintenance monorepo; each crate stands on its own as a library.
 
 This repository is still under active development, and crates vary in maturity. Some parts are already usable, while others are still being hardened or reshaped.

@@ -31,6 +31,14 @@
 |---|---|
 | [`neco-editor-ts`](./neco-editor-ts) | `neco-editor-wasm` をラップするホスト非依存 TypeScript API。`EditorSession`（WASM 計算レイヤー）と `EditorView`（DOM レンダリング・入力処理・仮想スクロール）を提供する。 |
 
+## デモアプリ
+
+crates.io や npm には公開しない、ランタイム動作確認用のアプリケーションです。エディタ本体の依存には含まれません。
+
+| アプリ | 概要 |
+|---|---|
+| [`neco-editor-gui`](./neco-editor-gui) | `neco-editor-ts` を Tauri v2 ウィンドウにマウントする単体デスクトップアプリ。フレームワークレスな Vite + TypeScript フロントエンドで `EditorView` を動作確認できます |
+
 各 crate は crates.io で個別公開できるよう、意図的に独立性を保っています。運用は monorepo 体制ですが、実行時に密結合する単一フレームワークではありません。
 
 このリポジトリはまだ開発途中で、crate ごとに成熟度に差があります。すでに実用できる部分もあれば、まだ詰めている途中の実装も含みます。

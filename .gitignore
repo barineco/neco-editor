@@ -2,3 +2,6 @@
 target/
 tmp/
 node_modules/
+dist/
+**/gen/
+**/.vite/
