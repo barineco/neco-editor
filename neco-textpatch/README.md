@@ -52,6 +52,7 @@ assert_eq!(updated, "settings {\n  mode = \"safe\"\n}\n");
 | `replace_block(source, block_name, replacement)` | Build a patch that replaces one block body |
 | `KnownEntry` | One keyed replacement entry for block merging |
 | `merge_known_entries(source, block_name, entries)` | Replace known keyed entries and append missing ones |
+| `inverse_patches(original_text, patches)` | Compute inverse patches that undo a set of forward patches |
 
 ## License
 

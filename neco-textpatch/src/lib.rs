@@ -156,6 +156,32 @@ pub fn apply_patches(source: &str, patches: &[TextPatch]) -> Result<String, Text
     Ok(output)
 }
 
+/// forward パッチ群に対する逆パッチ群を生成する。
+/// `apply_patches` 済みのテキストへ適用すると、元のテキストへ戻せる。
+pub fn inverse_patches(original_text: &str, patches: &[TextPatch]) -> Vec<TextPatch> {
+    let ordered = sorted_patches(patches);
+
+    let mut cumulative_offset = 0isize;
+    let mut inverse = Vec::with_capacity(ordered.len());
+
+    for sp in &ordered {
+        let patch = &sp.patch;
+        let replaced = original_text[patch.start..patch.end].to_string();
+        let inverse_start = patch
+            .start
+            .checked_add_signed(cumulative_offset)
+            .expect("validated patch offset should stay within bounds");
+        let inverse_end = inverse_start + patch.replacement.len();
+        let inverse_patch = TextPatch::new(inverse_start, inverse_end, replaced)
+            .expect("inverse patch range is derived from validated patches");
+
+        inverse.push(inverse_patch);
+        cumulative_offset += patch.replacement.len() as isize - (patch.end - patch.start) as isize;
+    }
+
+    inverse
+}
+
 pub fn find_block_range(source: &str, block_name: &str) -> Result<BlockRange, TextPatchError> {
     let Some((block_start, open_brace)) = find_named_block_start(source, block_name) else {
         return Err(TextPatchError::BlockNotFound {
@@ -443,8 +469,9 @@ impl TextPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_patch, apply_patches, find_block_range, merge_known_entries, replace_block,
-        validate_patches, BlockRange, KnownEntry, PatchConflict, TextPatch, TextPatchError,
+        apply_patch, apply_patches, find_block_range, inverse_patches, merge_known_entries,
+        replace_block, validate_patches, BlockRange, KnownEntry, PatchConflict, TextPatch,
+        TextPatchError,
     };
 
     #[test]
@@ -535,6 +562,65 @@ mod tests {
                 second_end: 1,
             })
         );
+    }
+
+    #[test]
+    fn test_inverse_single_insert() {
+        let patches = vec![TextPatch::insert(3, "!")];
+        let inverse = inverse_patches("abc", &patches);
+        assert_eq!(
+            inverse,
+            vec![TextPatch::delete(3, 4).expect("valid delete")]
+        );
+    }
+
+    #[test]
+    fn test_inverse_single_delete() {
+        let patches = vec![TextPatch::delete(1, 3).expect("valid delete")];
+        let inverse = inverse_patches("abcd", &patches);
+        assert_eq!(inverse, vec![TextPatch::insert(1, "bc")]);
+    }
+
+    #[test]
+    fn test_inverse_single_replace() {
+        let patches = vec![TextPatch::replace(1, 4, "XYZ").expect("valid patch")];
+        let inverse = inverse_patches("abcde", &patches);
+        assert_eq!(
+            inverse,
+            vec![TextPatch::replace(1, 4, "bcd").expect("valid patch")]
+        );
+    }
+
+    #[test]
+    fn test_inverse_multiple_patches() {
+        let patches = vec![
+            TextPatch::replace(1, 3, "XYZ").expect("valid patch"),
+            TextPatch::insert(5, "!"),
+            TextPatch::delete(6, 8).expect("valid patch"),
+        ];
+        let inverse = inverse_patches("abcdefgh", &patches);
+        assert_eq!(
+            inverse,
+            vec![
+                TextPatch::replace(1, 4, "bc").expect("valid patch"),
+                TextPatch::delete(6, 7).expect("valid patch"),
+                TextPatch::insert(8, "gh"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_inverse_round_trip() {
+        let original = "abcdefghij";
+        let forward = vec![
+            TextPatch::replace(1, 3, "XYZ").expect("valid patch"),
+            TextPatch::insert(5, "!"),
+            TextPatch::delete(8, 10).expect("valid patch"),
+        ];
+        let modified = apply_patches(original, &forward).expect("forward patch should apply");
+        let inverse = inverse_patches(original, &forward);
+        let restored = apply_patches(&modified, &inverse).expect("inverse patch should apply");
+        assert_eq!(restored, original);
     }
 
     #[test]
