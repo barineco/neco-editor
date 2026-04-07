@@ -1,0 +1,16 @@
+[package]
+name = "neco-editor-search"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Text search engine for editor buffers"
+repository = "https://github.com/barineco/neco-editor"
+readme = "README.md"
+documentation = "https://docs.rs/neco-editor-search"
+keywords = ["editor", "search", "find", "replace"]
+categories = ["text-processing"]
+
+[dependencies]
+neco-textview = { version = "0.2", path = "../neco-textview" }
+regex = "1"

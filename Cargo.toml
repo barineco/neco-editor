@@ -12,6 +12,7 @@ members = [
     "neco-syntax-textmate",
     "neco-editor",
     "neco-editor-viewport",
+    "neco-editor-search",
 ]
 default-members = [
     "neco-pathrel",
@@ -26,5 +27,6 @@ default-members = [
     "neco-syntax-textmate",
     "neco-editor",
     "neco-editor-viewport",
+    "neco-editor-search",
 ]
 resolver = "2"

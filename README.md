@@ -24,6 +24,7 @@ More crates may be added over time.
 | [`neco-syntax-textmate`](./neco-syntax-textmate) | TextMate grammar tokenizer built on syntect | none | `syntect` |
 | [`neco-editor`](./neco-editor) | editor buffer combining text, decorations, wrapping, history, and syntax | all above | none |
 | [`neco-editor-viewport`](./neco-editor-viewport) | pixel-geometry helpers for visible-line ranges, caret rects, selection rects, and hit-testing | `neco-textview`, `neco-wrap` | none |
+| [`neco-editor-search`](./neco-editor-search) | buffer search engine (plain text, regex, whole-word) | `neco-textview` | `regex` |
 
 Each crate is intentionally independent so it can be published and consumed separately on crates.io. The repository is a monorepo for maintenance convenience, not a runtime-coupled framework.
 
