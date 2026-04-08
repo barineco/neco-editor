@@ -2,9 +2,11 @@
  * Keyboard and IME input handling via a hidden textarea.
  *
  * Captures keydown events and converts them into editor commands.
- * Correctly handles IME composition by suppressing commands until
- * compositionend fires.
+ * Correctly handles IME composition by routing events through
+ * CompositionTracker and suppressing WebKit's post-commit stragglers.
  */
+
+import { CompositionTracker } from './composition/tracker'
 
 // ---------------------------------------------------------------------------
 // InputCommand
@@ -12,6 +14,9 @@
 
 export type InputCommand =
   | { type: 'insert'; text: string }
+  | { type: 'compositionUpdate'; text: string }
+  | { type: 'compositionCommit'; text: string }
+  | { type: 'compositionCancel' }
   | { type: 'delete'; direction: 'backward' | 'forward' }
   | { type: 'newline' }
   | { type: 'tab' }
@@ -58,7 +63,10 @@ function isPrimaryModifier(e: KeyboardEvent): boolean {
 export class InputHandler {
   private textarea: HTMLTextAreaElement
   private composing = false
+  private justCommitted = false
+  private justCommittedRafId: number | null = null
   private disposed = false
+  private tracker: CompositionTracker
 
   private handleKeydown: (e: KeyboardEvent) => void
   private handleCompositionStart: () => void
@@ -99,9 +107,34 @@ export class InputHandler {
     _container.style.position = _container.style.position || 'relative'
     _container.appendChild(this.textarea)
 
+    this.tracker = new CompositionTracker({
+      onPending: (text) => {
+        this.onCommand({ type: 'compositionUpdate', text })
+      },
+      onCommit: (text) => {
+        this.composing = false
+        if (text.length > 0) {
+          this.startJustCommittedWindow()
+          this.onCommand({ type: 'compositionCommit', text })
+        } else {
+          this.onCommand({ type: 'compositionCancel' })
+        }
+        this.textarea.value = ''
+      },
+      onCancel: () => {
+        this.composing = false
+        this.onCommand({ type: 'compositionCancel' })
+        this.textarea.value = ''
+      },
+    })
+
     // --- Event handlers ---------------------------------------------------
 
     this.handleKeydown = (e: KeyboardEvent) => {
+      if (this.justCommitted && this.shouldSuppressJustCommittedKey(e)) {
+        e.preventDefault()
+        return
+      }
       if (this.composing) return
 
       const cmd = this.translateKey(e)
@@ -112,21 +145,17 @@ export class InputHandler {
     }
 
     this.handleCompositionStart = () => {
+      this.clearJustCommittedWindow()
       this.composing = true
+      this.tracker.handleStart()
     }
 
-    this.handleCompositionUpdate = (_e: CompositionEvent) => {
-      // Intentionally empty; the composition preview is handled by the
-      // textarea itself. We may forward the intermediate text in the future.
+    this.handleCompositionUpdate = (e: CompositionEvent) => {
+      this.tracker.handleUpdate(e.data ?? '')
     }
 
     this.handleCompositionEnd = (e: CompositionEvent) => {
-      this.composing = false
-      const text = e.data
-      if (text) {
-        this.onCommand({ type: 'insert', text })
-      }
-      // Clear the textarea so subsequent input events start fresh.
+      this.tracker.handleEnd(e.data ?? '')
       this.textarea.value = ''
     }
 
@@ -134,6 +163,10 @@ export class InputHandler {
       if (this.composing) return
 
       const ie = e as InputEvent
+      if (this.justCommitted && ie.inputType === 'insertFromComposition') {
+        this.textarea.value = ''
+        return
+      }
       // For non-composition text input (e.g. dead-key sequences on Linux),
       // the 'input' event carries the final text when keydown didn't produce
       // an insert command.
@@ -171,6 +204,8 @@ export class InputHandler {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+
+    this.clearJustCommittedWindow()
 
     this.textarea.removeEventListener('keydown', this.handleKeydown)
     this.textarea.removeEventListener('compositionstart', this.handleCompositionStart)
@@ -289,5 +324,26 @@ export class InputHandler {
     }
 
     return null
+  }
+
+  private startJustCommittedWindow(): void {
+    this.clearJustCommittedWindow()
+    this.justCommitted = true
+    this.justCommittedRafId = requestAnimationFrame(() => {
+      this.justCommitted = false
+      this.justCommittedRafId = null
+    })
+  }
+
+  private clearJustCommittedWindow(): void {
+    this.justCommitted = false
+    if (this.justCommittedRafId !== null) {
+      cancelAnimationFrame(this.justCommittedRafId)
+      this.justCommittedRafId = null
+    }
+  }
+
+  private shouldSuppressJustCommittedKey(e: KeyboardEvent): boolean {
+    return e.key === 'Enter'
   }
 }

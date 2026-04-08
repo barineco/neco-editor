@@ -142,6 +142,20 @@
   z-index: 1;
 }
 
+.neco-composition-overlay {
+  position: absolute;
+  display: none;
+  padding: 0 1px;
+  background: rgba(120, 160, 210, 0.18);
+  color: var(--neco-editor-fg);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  white-space: pre;
+  pointer-events: none;
+  z-index: 3;
+}
+
 /* --- Cursor --- */
 .neco-cursor {
   position: absolute;

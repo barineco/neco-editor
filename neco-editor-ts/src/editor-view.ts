@@ -101,6 +101,7 @@ export class EditorView {
   private tabSize: number
   private lineHeight = 0
   private charWidth = 0
+  private compositionText = ''
 
   // -- Sub-modules ----------------------------------------------------------
   private renderer: Renderer
@@ -558,6 +559,12 @@ export class EditorView {
   // =========================================================================
 
   private handleInputCommand(cmd: InputCommand): void {
+    if (cmd.type === 'compositionUpdate' || cmd.type === 'compositionCancel') {
+      this.compositionText = cmd.type === 'compositionUpdate' ? cmd.text : ''
+      this.scheduleRender()
+      return
+    }
+
     if (this.session.isReadOnly() && cmd.type !== 'copy' && cmd.type !== 'moveCursor'
       && cmd.type !== 'moveCursorByWord' && cmd.type !== 'moveCursorToLineEdge'
       && cmd.type !== 'moveCursorToDocumentEdge' && cmd.type !== 'pageMove'
@@ -569,6 +576,12 @@ export class EditorView {
       case 'insert':
         this.handleInsert(cmd.text)
         break
+      case 'compositionCommit': {
+        const [start, end] = this.getEditRange()
+        this.compositionText = ''
+        this.applyEdit(start, end, cmd.text, 'type')
+        break
+      }
       case 'delete':
         this.handleDelete(cmd.direction)
         break
@@ -905,6 +918,17 @@ export class EditorView {
       this.renderer.renderSelections(adjustedSelRects)
     } else {
       this.renderer.renderSelections([])
+    }
+
+    if (caretRect && this.compositionText.length > 0) {
+      this.renderer.renderComposition(this.compositionText, {
+        x: caretRect.x + gutterWidth,
+        y: coords.docToAbsoluteY(docY(caretRect.y)),
+        width: caretRect.width,
+        height: caretRect.height,
+      })
+    } else {
+      this.renderer.clearComposition()
     }
   }
 

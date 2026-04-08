@@ -27,6 +27,7 @@ export class Renderer {
   private linesEl: HTMLElement
   private caretEl: HTMLElement
   private selectionLayer: HTMLElement
+  private compositionEl: HTMLElement
 
   constructor(container: HTMLElement, options: RendererOptions) {
     this.container = container
@@ -52,7 +53,11 @@ export class Renderer {
     this.selectionLayer = document.createElement('div')
     this.selectionLayer.className = 'neco-selection-layer'
 
+    this.compositionEl = document.createElement('div')
+    this.compositionEl.className = 'neco-composition-overlay'
+
     this.contentEl.appendChild(this.linesEl)
+    this.contentEl.appendChild(this.compositionEl)
     this.contentEl.appendChild(this.caretEl)
     this.contentEl.appendChild(this.selectionLayer)
 
@@ -176,6 +181,22 @@ export class Renderer {
     }
   }
 
+  renderComposition(text: string, rect: Rect): void {
+    this.compositionEl.textContent = text
+    this.compositionEl.style.display = text.length > 0 ? 'block' : 'none'
+    this.compositionEl.style.left = `${rect.x}px`
+    this.compositionEl.style.top = `${rect.y}px`
+    this.compositionEl.style.minHeight = `${rect.height}px`
+  }
+
+  clearComposition(): void {
+    this.compositionEl.textContent = ''
+    this.compositionEl.style.display = 'none'
+    this.compositionEl.style.left = '0px'
+    this.compositionEl.style.top = '0px'
+    this.compositionEl.style.minHeight = '0px'
+  }
+
   /** Update the gutter column width via CSS variable (gutterBgEl and gutter cells both reference it). */
   updateGutterWidth(width: number): void {
     this.options.gutterWidth = width
@@ -204,6 +225,7 @@ export class Renderer {
   clear(): void {
     this.linesEl.textContent = ''
     this.selectionLayer.textContent = ''
+    this.clearComposition()
     this.caretEl.style.left = '0px'
     this.caretEl.style.top = '0px'
     this.caretEl.style.width = '0px'
