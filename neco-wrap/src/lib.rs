@@ -7,9 +7,93 @@ pub enum BreakOpportunity {
     Mandatory,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayoutMode {
+    HorizontalLtr,
+    VerticalRl,
+    VerticalLr,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct LineLayoutPolicy {
+    layout_mode: LayoutMode,
+    redistribute_inline_width: fn(u32, u32) -> u32,
+}
+
+impl LineLayoutPolicy {
+    pub fn new(layout_mode: LayoutMode, redistribute_inline_width: fn(u32, u32) -> u32) -> Self {
+        Self {
+            layout_mode,
+            redistribute_inline_width,
+        }
+    }
+
+    pub fn horizontal_ltr() -> Self {
+        Self::new(LayoutMode::HorizontalLtr, preserve_inline_width)
+    }
+
+    pub fn layout_mode(&self) -> LayoutMode {
+        self.layout_mode
+    }
+
+    pub fn redistributed_inline_width(&self, line_width: u32, max_width: u32) -> u32 {
+        (self.redistribute_inline_width)(line_width, max_width)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct WidthPolicy {
+    char_width: fn(char) -> u32,
+    tab_width: Option<u32>,
+}
+
+impl WidthPolicy {
+    pub fn new(char_width: fn(char) -> u32) -> Self {
+        Self {
+            char_width,
+            tab_width: None,
+        }
+    }
+
+    pub fn monospace_ascii(tab_width: u32) -> Self {
+        Self::with_tab_width(monospace_ascii_width, tab_width)
+    }
+
+    pub fn cjk_grid(tab_width: u32) -> Self {
+        Self::with_tab_width(cjk_grid_width, tab_width)
+    }
+
+    pub fn with_tab_width(char_width: fn(char) -> u32, tab_width: u32) -> Self {
+        Self {
+            char_width,
+            tab_width: Some(tab_width),
+        }
+    }
+
+    pub fn tab_width(&self) -> Option<u32> {
+        self.tab_width
+    }
+
+    pub fn char_width(&self) -> fn(char) -> u32 {
+        self.char_width
+    }
+
+    pub fn advance_of(&self, ch: char) -> u32 {
+        if ch == '\t' {
+            self.tab_width.unwrap_or_else(|| (self.char_width)(ch))
+        } else {
+            (self.char_width)(ch)
+        }
+    }
+
+    pub fn text_width(&self, text: &str) -> u32 {
+        text.chars().map(|ch| self.advance_of(ch)).sum()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct WrapPolicy {
-    char_width: fn(char) -> u32,
+    width_policy: WidthPolicy,
     break_opportunity: fn(&str, usize) -> BreakOpportunity,
 }
 
@@ -18,14 +102,25 @@ impl WrapPolicy {
         char_width: fn(char) -> u32,
         break_opportunity: fn(&str, usize) -> BreakOpportunity,
     ) -> Self {
+        Self::with_width_policy(WidthPolicy::new(char_width), break_opportunity)
+    }
+
+    pub fn with_width_policy(
+        width_policy: WidthPolicy,
+        break_opportunity: fn(&str, usize) -> BreakOpportunity,
+    ) -> Self {
         Self {
-            char_width,
+            width_policy,
             break_opportunity,
         }
     }
 
+    pub fn width_policy(&self) -> WidthPolicy {
+        self.width_policy
+    }
+
     pub fn char_width(&self) -> fn(char) -> u32 {
-        self.char_width
+        self.width_policy.char_width()
     }
 
     pub fn break_opportunity(&self) -> fn(&str, usize) -> BreakOpportunity {
@@ -33,11 +128,15 @@ impl WrapPolicy {
     }
 
     pub fn code() -> Self {
-        Self::new(code_char_width, code_break_opportunity)
+        Self::code_with_width_policy(WidthPolicy::cjk_grid(4))
+    }
+
+    pub fn code_with_width_policy(width_policy: WidthPolicy) -> Self {
+        Self::with_width_policy(width_policy, code_break_opportunity)
     }
 
     pub fn japanese_basic() -> Self {
-        Self::new(japanese_char_width, japanese_break_opportunity)
+        Self::with_width_policy(WidthPolicy::cjk_grid(4), japanese_break_opportunity)
     }
 }
 
@@ -78,6 +177,37 @@ impl VisualLine {
 
     pub const fn is_empty(&self) -> bool {
         self.start == self.end
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VisualLayoutSpace {
+    logical_line: u32,
+    visual_line: u32,
+    inline_advance: u32,
+    block_advance: u32,
+    layout_mode: LayoutMode,
+}
+
+impl VisualLayoutSpace {
+    pub const fn logical_line(&self) -> u32 {
+        self.logical_line
+    }
+
+    pub const fn visual_line(&self) -> u32 {
+        self.visual_line
+    }
+
+    pub const fn inline_advance(&self) -> u32 {
+        self.inline_advance
+    }
+
+    pub const fn block_advance(&self) -> u32 {
+        self.block_advance
+    }
+
+    pub const fn layout_mode(&self) -> LayoutMode {
+        self.layout_mode
     }
 }
 
@@ -142,6 +272,35 @@ impl WrapMap {
             end: line_len,
         });
         visual_lines
+    }
+
+    pub fn visual_layout_space(
+        &self,
+        line: u32,
+        local_visual_line: u32,
+        line_text: &str,
+        policy: &WrapPolicy,
+        line_layout_policy: &LineLayoutPolicy,
+    ) -> VisualLayoutSpace {
+        let line_len = usize_to_u32(line_text.len(), "line len");
+        let visual_lines = self.visual_lines(line, line_len);
+        let index = u32_to_usize(local_visual_line, "local visual line");
+        let visual_line = visual_lines[index];
+        let inline_advance = line_layout_policy.redistributed_inline_width(
+            policy.width_policy().text_width(
+                &line_text[u32_to_usize(visual_line.start, "start")
+                    ..u32_to_usize(visual_line.end, "end")],
+            ),
+            self.max_width,
+        );
+
+        VisualLayoutSpace {
+            logical_line: line,
+            visual_line: local_visual_line,
+            inline_advance,
+            block_advance: local_visual_line,
+            layout_mode: line_layout_policy.layout_mode(),
+        }
     }
 
     pub fn to_visual_line(&self, line: u32, byte_offset_in_line: u32) -> u32 {
@@ -212,7 +371,7 @@ pub fn wrap_line(line_text: &str, max_width: u32, policy: &WrapPolicy) -> Vec<Wr
         return Vec::new();
     }
 
-    let char_width = policy.char_width();
+    let width_policy = policy.width_policy();
     let break_opportunity = policy.break_opportunity();
     let mut wraps = Vec::new();
     let mut total_width = 0u32;
@@ -221,7 +380,7 @@ pub fn wrap_line(line_text: &str, max_width: u32, policy: &WrapPolicy) -> Vec<Wr
     let mut last_allowed = None::<WrapPoint>;
 
     for (byte_offset, ch) in line_text.char_indices() {
-        total_width += char_width(ch);
+        total_width += width_policy.advance_of(ch);
         let next_offset = byte_offset + ch.len_utf8();
         let next_offset_u32 = usize_to_u32(next_offset, "byte offset");
         let wrap_point = WrapPoint {
@@ -260,7 +419,12 @@ pub fn wrap_line(line_text: &str, max_width: u32, policy: &WrapPolicy) -> Vec<Wr
     wraps
 }
 
-fn code_char_width(ch: char) -> u32 {
+fn monospace_ascii_width(ch: char) -> u32 {
+    let _ = ch;
+    1
+}
+
+fn cjk_grid_width(ch: char) -> u32 {
     if ch.is_ascii() {
         1
     } else {
@@ -268,12 +432,8 @@ fn code_char_width(ch: char) -> u32 {
     }
 }
 
-fn japanese_char_width(ch: char) -> u32 {
-    if ch.is_ascii() {
-        1
-    } else {
-        east_asian_width(ch)
-    }
+fn preserve_inline_width(line_width: u32, _max_width: u32) -> u32 {
+    line_width
 }
 
 fn code_break_opportunity(line_text: &str, byte_offset: usize) -> BreakOpportunity {
@@ -428,6 +588,74 @@ mod tests {
         assert_eq!(wraps.len(), 1);
         assert_eq!(wraps[0].byte_offset(), usize_to_u32("あい ".len(), "len"));
         assert_eq!(wraps[0].visual_width(), 5);
+    }
+
+    #[test]
+    fn width_policy_can_customize_tab_advance() {
+        let width_policy = WidthPolicy::cjk_grid(2);
+        assert_eq!(width_policy.text_width("a\tb"), 4);
+
+        let wraps = wrap_line(
+            "a\tb c",
+            4,
+            &WrapPolicy::code_with_width_policy(width_policy),
+        );
+        assert_eq!(wraps.len(), 1);
+        assert_eq!(wraps[0].byte_offset(), usize_to_u32("a\tb ".len(), "len"));
+    }
+
+    #[test]
+    fn legacy_wrap_policy_new_keeps_tab_width_in_char_width_callback() {
+        fn legacy_width(ch: char) -> u32 {
+            if ch == '\t' {
+                7
+            } else {
+                1
+            }
+        }
+
+        let policy = WrapPolicy::new(legacy_width, code_break_opportunity);
+        assert_eq!(policy.char_width()('\t'), 7);
+        assert_eq!(policy.width_policy().advance_of('\t'), 7);
+    }
+
+    #[test]
+    fn visual_layout_space_tracks_inline_and_block_advances() {
+        let text = "ab cd";
+        let map = WrapMap::new([text].iter().copied(), 3, &WrapPolicy::code());
+        let layout = map.visual_layout_space(
+            0,
+            1,
+            text,
+            &WrapPolicy::code(),
+            &LineLayoutPolicy::horizontal_ltr(),
+        );
+
+        assert_eq!(layout.logical_line(), 0);
+        assert_eq!(layout.visual_line(), 1);
+        assert_eq!(layout.inline_advance(), 2);
+        assert_eq!(layout.block_advance(), 1);
+        assert_eq!(layout.layout_mode(), LayoutMode::HorizontalLtr);
+    }
+
+    #[test]
+    fn line_layout_policy_can_redistribute_inline_width() {
+        fn justify_to_max(_line_width: u32, max_width: u32) -> u32 {
+            max_width
+        }
+
+        let text = "ab cd";
+        let map = WrapMap::new([text].iter().copied(), 6, &WrapPolicy::code());
+        let layout = map.visual_layout_space(
+            0,
+            0,
+            text,
+            &WrapPolicy::code(),
+            &LineLayoutPolicy::new(LayoutMode::HorizontalLtr, justify_to_max),
+        );
+
+        assert_eq!(layout.inline_advance(), 6);
+        assert_eq!(layout.layout_mode(), LayoutMode::HorizontalLtr);
     }
 
     #[test]

@@ -5,5 +5,3 @@ node_modules/
 dist/
 **/gen/
 **/.vite/
-
-neco-editor-ts/src/composition

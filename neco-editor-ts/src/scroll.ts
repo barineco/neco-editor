@@ -6,6 +6,8 @@
  * rendered into the DOM.
  */
 
+import { blockAdvance, cssPx, type BlockAdvance, type CssPx } from './coordinates'
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -17,12 +19,12 @@ export interface ScrollManagerOptions {
 }
 
 export interface ScrollState {
-  scrollTop: number
-  totalHeight: number
-  visibleStartLine: number
-  visibleEndLine: number
+  scrollTop: CssPx
+  totalHeight: CssPx
+  visibleStartLine: BlockAdvance
+  visibleEndLine: BlockAdvance
   /** translateY offset for the lines container. */
-  offsetY: number
+  offsetY: CssPx
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +118,12 @@ export class ScrollManager {
       return null
     }
 
-    // Target is above the viewport — scroll up so the target sits at the top.
+    // Target is above the viewport: scroll up so the target sits at the top.
     if (targetY < scrollTop) {
       return targetY
     }
 
-    // Target is below the viewport — scroll down so the target's bottom
+    // Target is below the viewport: scroll down so the target's bottom
     // aligns with the viewport bottom.
     return targetY + caretHeight - this.containerHeight
   }
@@ -169,7 +171,13 @@ export class ScrollManager {
     const totalHeight = this.totalLines * this.lineHeight
 
     if (this.lineHeight <= 0 || this.totalLines <= 0) {
-      return { scrollTop, totalHeight, visibleStartLine: 0, visibleEndLine: 0, offsetY: 0 }
+      return {
+        scrollTop: cssPx(scrollTop),
+        totalHeight: cssPx(totalHeight),
+        visibleStartLine: blockAdvance(0),
+        visibleEndLine: blockAdvance(0),
+        offsetY: cssPx(0),
+      }
     }
 
     const rawStart = Math.floor(scrollTop / this.lineHeight)
@@ -179,6 +187,12 @@ export class ScrollManager {
     const visibleEndLine = Math.min(this.totalLines, rawStart + visibleCount + this.overscan)
     const offsetY = visibleStartLine * this.lineHeight
 
-    return { scrollTop, totalHeight, visibleStartLine, visibleEndLine, offsetY }
+    return {
+      scrollTop: cssPx(scrollTop),
+      totalHeight: cssPx(totalHeight),
+      visibleStartLine: blockAdvance(visibleStartLine),
+      visibleEndLine: blockAdvance(visibleEndLine),
+      offsetY: cssPx(offsetY),
+    }
   }
 }

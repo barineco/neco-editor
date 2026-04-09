@@ -5,13 +5,19 @@
  * click → setCursor, drag → setSelection, dblclick → selectWord.
  */
 
+import {
+  containerOffsetFromMouseEvent,
+  type ContainerX,
+  type ContainerY,
+} from './coordinates'
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
 export interface MouseHandlerCallbacks {
   /** Convert viewport-relative coordinates to a text offset. */
-  hitTest(x: number, y: number): number
+  hitTest(x: ContainerX, y: ContainerY): number
   /** Current vertical scroll position in pixels. */
   getScrollTop(): number
   /** Full document text (used for word-boundary detection). */
@@ -168,9 +174,7 @@ export class MouseHandler {
    * the injected hitTest callback.
    */
   private offsetFromEvent(e: MouseEvent): number {
-    const rect = this.container.getBoundingClientRect()
-    const x = e.clientX - rect.left   // ContX
-    const y = e.clientY - rect.top     // ContY (≈ ViewY for content area)
+    const { x, y } = containerOffsetFromMouseEvent(this.container, e)
     return this.callbacks.hitTest(x, y)
   }
 

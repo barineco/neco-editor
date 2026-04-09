@@ -6,6 +6,8 @@ export interface RenderLine {
 }
 
 /** A classified token span within a single line. */
+import type { BlockAdvance, InlineAdvance } from './coordinates'
+
 export interface TokenSpan {
   start: number
   end: number
@@ -19,6 +21,18 @@ export interface Rect {
   width: number
   height: number
 }
+
+export type LayoutMode = 'horizontal-ltr' | 'vertical-rl' | 'vertical-lr'
+
+export interface VisualLayoutSpace {
+  logicalLine: number
+  visualLine: number
+  inlineAdvance: InlineAdvance
+  blockAdvance: BlockAdvance
+  layoutMode: LayoutMode
+}
+
+export interface VisualLineFrame extends VisualLayoutSpace {}
 
 /** A search hit with byte range and position. */
 export interface SearchMatchInfo {

@@ -7,6 +7,7 @@
  */
 
 import { CompositionTracker } from './composition/tracker'
+import type { ScreenRect } from './coordinates'
 
 // ---------------------------------------------------------------------------
 // InputCommand
@@ -75,7 +76,7 @@ export class InputHandler {
   private handleInput: (e: Event) => void
 
   constructor(
-    _container: HTMLElement,
+    hostEl: HTMLElement,
     private onCommand: (cmd: InputCommand) => void,
   ) {
     // Create and style the hidden textarea
@@ -104,8 +105,7 @@ export class InputHandler {
       // but visually hidden. Avoid display:none which prevents focus.
       pointerEvents: 'none',
     })
-    _container.style.position = _container.style.position || 'relative'
-    _container.appendChild(this.textarea)
+    hostEl.appendChild(this.textarea)
 
     this.tracker = new CompositionTracker({
       onPending: (text) => {
@@ -193,6 +193,13 @@ export class InputHandler {
     this.textarea.focus()
   }
 
+  setAnchorRect(rect: ScreenRect): void {
+    this.textarea.style.left = `${rect.x}px`
+    this.textarea.style.top = `${rect.y}px`
+    this.textarea.style.width = `${Math.max(1, rect.width)}px`
+    this.textarea.style.height = `${Math.max(1, rect.height)}px`
+  }
+
   blur(): void {
     this.textarea.blur()
   }
@@ -245,12 +252,12 @@ export class InputHandler {
         case 'v':
         case 'V':
           return { type: 'paste' }
-        // Cmd+Home / Cmd+End (Mac) — document edges
+        // Cmd+Home / Cmd+End (Mac): document edges
         case 'Home':
           return { type: 'moveCursorToDocumentEdge', direction: 'start', extend: shift }
         case 'End':
           return { type: 'moveCursorToDocumentEdge', direction: 'end', extend: shift }
-        // Cmd+ArrowUp / Cmd+ArrowDown (Mac) — document edges
+        // Cmd+ArrowUp / Cmd+ArrowDown (Mac): document edges
         case 'ArrowUp':
           return isMac
             ? { type: 'moveCursorToDocumentEdge', direction: 'start', extend: shift }
@@ -259,7 +266,7 @@ export class InputHandler {
           return isMac
             ? { type: 'moveCursorToDocumentEdge', direction: 'end', extend: shift }
             : { type: 'moveCursor', direction: 'down', extend: shift }
-        // Cmd+ArrowLeft/Right (Mac) — line edges; Ctrl+Arrow (non-Mac) — word movement
+        // Cmd+ArrowLeft/Right (Mac): line edges; Ctrl+Arrow (non-Mac): word movement
         case 'ArrowLeft':
           return isMac
             ? { type: 'moveCursorToLineEdge', direction: 'start', extend: shift }
@@ -271,7 +278,7 @@ export class InputHandler {
       }
     }
 
-    // Alt+Arrow — word movement (Mac) or no-op (non-Mac alt is often OS-level)
+    // Alt+Arrow: word movement (Mac) or no-op (non-Mac alt is often OS-level)
     if (alt && !mod) {
       switch (e.key) {
         case 'ArrowLeft':
@@ -315,7 +322,7 @@ export class InputHandler {
           return { type: 'pageMove', direction: 'down', extend: shift }
       }
 
-      // Printable single-character input — let the 'input' event handle it
+      // Printable single-character input: let the 'input' event handle it
       // so that dead-key sequences and OS-level transformations are respected.
       // We return null here to avoid preventing the default behaviour.
       if (e.key.length === 1) {

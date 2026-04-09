@@ -1,4 +1,5 @@
-import type { RenderLine, Rect } from './types'
+import { screenX, type ScreenRect } from './coordinates'
+import type { RenderLine } from './types'
 import { tokenKindToClass } from './theme'
 
 export interface RendererOptions {
@@ -151,7 +152,7 @@ export class Renderer {
   }
 
   /** Position the caret element at the given pixel rect. */
-  renderCaret(rect: Rect): void {
+  renderCaret(rect: ScreenRect): void {
     const moved =
       this.caretEl.style.left !== `${rect.x}px` ||
       this.caretEl.style.top !== `${rect.y}px`
@@ -167,7 +168,7 @@ export class Renderer {
   }
 
   /** Render selection highlight rectangles (one per visual line). */
-  renderSelections(rects: Rect[]): void {
+  renderSelections(rects: ScreenRect[]): void {
     this.selectionLayer.textContent = ''
     for (const rect of rects) {
       const selEl = document.createElement('div')
@@ -181,12 +182,13 @@ export class Renderer {
     }
   }
 
-  renderComposition(text: string, rect: Rect): void {
+  renderComposition(text: string, rect: ScreenRect): number {
     this.compositionEl.textContent = text
     this.compositionEl.style.display = text.length > 0 ? 'block' : 'none'
     this.compositionEl.style.left = `${rect.x}px`
     this.compositionEl.style.top = `${rect.y}px`
     this.compositionEl.style.minHeight = `${rect.height}px`
+    return screenX((rect.x as number) + this.compositionEl.getBoundingClientRect().width) as number
   }
 
   clearComposition(): void {

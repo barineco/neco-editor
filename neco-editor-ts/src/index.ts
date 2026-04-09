@@ -6,6 +6,9 @@ export type {
   RangeChange,
   TokenSpan,
   Rect,
+  VisualLayoutSpace,
+  VisualLineFrame,
+  LayoutMode,
   SearchMatchInfo,
   IndentInfo,
   BracketPair,
@@ -13,5 +16,41 @@ export type {
   SearchOptions,
 } from './types'
 export type { EditorViewOptions, EditorViewState, Disposable } from './editor-view'
-export { CoordinateMap, docX, docY, viewY, contX, contY, toViewY } from './coordinates'
-export type { DocX, DocY, ViewY, ContX, ContY, LayoutParams } from './coordinates'
+export {
+  CoordinateMap,
+  docX,
+  docY,
+  inlineAdvance,
+  blockAdvance,
+  cssPx,
+  devicePx,
+  viewportX,
+  viewY,
+  screenX,
+  screenY,
+  screenRect,
+  containerX,
+  containerY,
+  contX,
+  contY,
+  toViewY,
+} from './coordinates'
+export type {
+  DocX,
+  DocY,
+  InlineAdvance,
+  BlockAdvance,
+  CssPx,
+  DevicePx,
+  ViewportX,
+  ViewY,
+  ViewportY,
+  ScreenX,
+  ScreenY,
+  ScreenRect,
+  ContainerX,
+  ContainerY,
+  ContX,
+  ContY,
+  LayoutParams,
+} from './coordinates'

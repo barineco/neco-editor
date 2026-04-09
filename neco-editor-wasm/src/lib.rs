@@ -8,8 +8,8 @@ use js_sys::{Array, Object, Reflect};
 use neco_editor::neco_decor::DecorationSet;
 use neco_editor::neco_history::EditHistory;
 use neco_editor::neco_textpatch::{TextPatch, TextPatchError};
-use neco_editor::neco_textview::{RangeChange, Selection};
-use neco_editor::neco_wrap::{WrapMap, WrapPolicy};
+use neco_editor::neco_textview::{RangeChange, Selection, Utf16Mapping};
+use neco_editor::neco_wrap::{LayoutMode, LineLayoutPolicy, WidthPolicy, WrapMap, WrapPolicy};
 use neco_editor::{EditorBuffer, IndentStyle};
 use neco_editor_search::{SearchError, SearchMatch, SearchQuery};
 use neco_editor_viewport::{self, Rect, ViewportError, ViewportLayout, ViewportMetrics};
@@ -49,6 +49,44 @@ fn rect_to_js_value(rect: &Rect) -> JsValue {
     set_prop(&object, "y", JsValue::from_f64(rect.y));
     set_prop(&object, "width", JsValue::from_f64(rect.width));
     set_prop(&object, "height", JsValue::from_f64(rect.height));
+    object.into()
+}
+
+fn layout_mode_str(mode: LayoutMode) -> &'static str {
+    match mode {
+        LayoutMode::HorizontalLtr => "horizontal-ltr",
+        LayoutMode::VerticalRl => "vertical-rl",
+        LayoutMode::VerticalLr => "vertical-lr",
+    }
+}
+
+fn visual_line_frame_to_js_value(frame: &neco_editor_viewport::VisualLineFrame) -> JsValue {
+    let object = Object::new();
+    set_prop(
+        &object,
+        "logicalLine",
+        JsValue::from_f64(f64::from(frame.logical_line())),
+    );
+    set_prop(
+        &object,
+        "visualLine",
+        JsValue::from_f64(f64::from(frame.visual_line())),
+    );
+    set_prop(
+        &object,
+        "inlineAdvance",
+        JsValue::from_f64(f64::from(frame.inline_advance())),
+    );
+    set_prop(
+        &object,
+        "blockAdvance",
+        JsValue::from_f64(f64::from(frame.block_advance())),
+    );
+    set_prop(
+        &object,
+        "layoutMode",
+        JsValue::from_str(layout_mode_str(frame.layout_mode())),
+    );
     object.into()
 }
 
@@ -141,6 +179,8 @@ fn map_search_error(e: SearchError) -> WasmErrorData {
 pub struct EditorHandle {
     buffer: EditorBuffer,
     decorations: DecorationSet,
+    line_layout_policy: LineLayoutPolicy,
+    width_policy: WidthPolicy,
     wrap_map: WrapMap,
     wrap_policy: WrapPolicy,
     history: EditHistory,
@@ -166,7 +206,9 @@ impl EditorHandle {
         tab_width: u32,
     ) -> EditorHandle {
         let buffer = EditorBuffer::new(text.to_string());
-        let wrap_policy = WrapPolicy::code();
+        let line_layout_policy = LineLayoutPolicy::horizontal_ltr();
+        let width_policy = WidthPolicy::cjk_grid(tab_width);
+        let wrap_policy = WrapPolicy::code_with_width_policy(width_policy);
         let wrap_map = WrapMap::new(text.split('\n'), u32::MAX, &wrap_policy);
         let history = EditHistory::new(text);
         let decorations = DecorationSet::new();
@@ -181,6 +223,8 @@ impl EditorHandle {
         EditorHandle {
             buffer,
             decorations,
+            line_layout_policy,
+            width_policy,
             wrap_map,
             wrap_policy,
             history,
@@ -199,6 +243,11 @@ impl EditorHandle {
     #[wasm_bindgen(js_name = getText)]
     pub fn get_text(&self) -> String {
         self.buffer.text().to_string()
+    }
+
+    #[wasm_bindgen(js_name = getTextByteLength)]
+    pub fn get_text_byte_length(&self) -> f64 {
+        self.buffer.text().len() as f64
     }
 
     #[wasm_bindgen(js_name = isDirty)]
@@ -280,6 +329,25 @@ impl EditorHandle {
             .map_err(error_to_js_value)
     }
 
+    #[wasm_bindgen(js_name = getVisualLineFrame)]
+    pub fn get_visual_line_frame(&self, visual_line: u32) -> Result<JsValue, JsValue> {
+        get_visual_line_frame_value(self, visual_line).map_err(error_to_js_value)
+    }
+
+    #[wasm_bindgen(js_name = byteOffsetToUtf16)]
+    pub fn byte_offset_to_utf16(&self, offset: u32) -> Result<f64, JsValue> {
+        byte_offset_to_utf16_value(self, offset)
+            .map(|value| value as f64)
+            .map_err(error_to_js_value)
+    }
+
+    #[wasm_bindgen(js_name = utf16OffsetToByte)]
+    pub fn utf16_offset_to_byte(&self, offset: u32) -> Result<f64, JsValue> {
+        utf16_offset_to_byte_value(self, offset)
+            .map(|value| value as f64)
+            .map_err(error_to_js_value)
+    }
+
     #[wasm_bindgen(js_name = hitTest)]
     pub fn hit_test(&self, x: f64, y: f64, scroll_top: f64) -> f64 {
         hit_test_value(self, x, y, scroll_top) as f64
@@ -328,6 +396,13 @@ impl EditorHandle {
             char_width,
             tab_width,
         };
+        self.width_policy = WidthPolicy::cjk_grid(tab_width);
+        self.wrap_policy = WrapPolicy::code_with_width_policy(self.width_policy);
+        self.wrap_map = WrapMap::new(
+            self.buffer.text().split('\n'),
+            self.wrap_map.max_width(),
+            &self.wrap_policy,
+        );
     }
 
     #[wasm_bindgen(js_name = getGutterWidth)]
@@ -675,13 +750,14 @@ fn get_visible_lines_value(handle: &mut EditorHandle, scroll_top: f64, height: f
 
 fn get_caret_rect_value(handle: &EditorHandle, offset: u32) -> Result<Rect, WasmErrorData> {
     let layout = compute_layout(handle);
-    neco_editor_viewport::caret_rect(
+    neco_editor_viewport::caret_rect_with_width_policy(
         handle.buffer.text(),
         offset as usize,
         handle.buffer.line_index(),
         &handle.wrap_map,
         &handle.viewport_metrics,
         &layout,
+        &handle.width_policy,
     )
     .map_err(map_viewport_error)
 }
@@ -693,20 +769,46 @@ fn get_selection_rects_value(
 ) -> Result<Vec<Rect>, WasmErrorData> {
     let layout = compute_layout(handle);
     let selection = Selection::new(anchor as usize, head as usize);
-    neco_editor_viewport::selection_rects(
+    neco_editor_viewport::selection_rects_with_width_policy(
         handle.buffer.text(),
         &selection,
         handle.buffer.line_index(),
         &handle.wrap_map,
         &handle.viewport_metrics,
         &layout,
+        &handle.width_policy,
     )
     .map_err(map_viewport_error)
 }
 
+fn visual_line_frame_value(
+    handle: &EditorHandle,
+    visual_line: u32,
+) -> Result<neco_editor_viewport::VisualLineFrame, WasmErrorData> {
+    let layout = compute_layout(handle);
+    neco_editor_viewport::visual_line_frame(
+        handle.buffer.text(),
+        visual_line,
+        handle.buffer.line_index(),
+        &handle.wrap_map,
+        &handle.viewport_metrics,
+        &layout,
+        &handle.width_policy,
+        &handle.line_layout_policy,
+    )
+    .map_err(map_viewport_error)
+}
+
+fn get_visual_line_frame_value(
+    handle: &EditorHandle,
+    visual_line: u32,
+) -> Result<JsValue, WasmErrorData> {
+    visual_line_frame_value(handle, visual_line).map(|frame| visual_line_frame_to_js_value(&frame))
+}
+
 fn hit_test_value(handle: &EditorHandle, x: f64, y: f64, scroll_top: f64) -> usize {
     let layout = compute_layout(handle);
-    neco_editor_viewport::hit_test(
+    neco_editor_viewport::hit_test_with_width_policy(
         x,
         y,
         scroll_top,
@@ -715,7 +817,28 @@ fn hit_test_value(handle: &EditorHandle, x: f64, y: f64, scroll_top: f64) -> usi
         &handle.wrap_map,
         &handle.viewport_metrics,
         &layout,
+        &handle.width_policy,
     )
+}
+
+fn byte_offset_to_utf16_value(handle: &EditorHandle, offset: u32) -> Result<usize, WasmErrorData> {
+    Utf16Mapping::new(handle.buffer.text())
+        .byte_to_utf16(offset as usize)
+        .map_err(map_viewport_error_from_text)
+}
+
+fn utf16_offset_to_byte_value(handle: &EditorHandle, offset: u32) -> Result<usize, WasmErrorData> {
+    Utf16Mapping::new(handle.buffer.text())
+        .utf16_to_byte(offset as usize)
+        .map_err(map_viewport_error_from_text)
+}
+
+fn map_viewport_error_from_text(e: neco_editor::neco_textview::TextViewError) -> WasmErrorData {
+    WasmErrorData {
+        domain: "text",
+        code: "utf16_mapping_error",
+        message: e.to_string(),
+    }
 }
 
 fn tokenize_line_value(handle: &mut EditorHandle, line: &str) -> Vec<TokenSpan> {
@@ -960,6 +1083,49 @@ mod tests {
         let layout = compute_layout(&h);
         let offset = hit_test_value(&h, layout.content_left, 0.0, 0.0);
         assert_eq!(offset, 0);
+    }
+
+    #[test]
+    fn update_metrics_rebuilds_wrap_map_for_tab_width_changes() {
+        let mut h = make_handle("a\t b");
+        h.wrap_map = WrapMap::new(h.buffer.text().split('\n'), 2, &h.wrap_policy);
+
+        let before = get_caret_rect_value(&h, "a\t".len() as u32).expect("rect before update");
+        assert!((before.y - 20.0).abs() < f64::EPSILON);
+
+        h.update_metrics(20.0, 8.0, 1);
+
+        let after = get_caret_rect_value(&h, "a\t".len() as u32).expect("rect after update");
+        assert!(after.y.abs() < f64::EPSILON);
+
+        let hit = hit_test_value(&h, after.x, after.y, 0.0);
+        assert_eq!(hit, "a\t".len());
+    }
+
+    #[test]
+    fn visual_line_frame_value_uses_horizontal_layout_mode() {
+        let mut h = make_handle("ab cd");
+        h.wrap_map = WrapMap::new(h.buffer.text().split('\n'), 3, &h.wrap_policy);
+        let frame = visual_line_frame_value(&h, 1).expect("frame");
+
+        assert_eq!(frame.logical_line(), 0);
+        assert_eq!(frame.visual_line(), 1);
+        assert_eq!(frame.inline_advance(), 2);
+        assert_eq!(frame.block_advance(), 1);
+        assert_eq!(frame.layout_mode(), LayoutMode::HorizontalLtr);
+    }
+
+    #[test]
+    fn utf16_mapping_roundtrips_through_wasm_helpers() {
+        let h = make_handle("a😀b");
+
+        assert_eq!(byte_offset_to_utf16_value(&h, 0).unwrap(), 0);
+        assert_eq!(byte_offset_to_utf16_value(&h, 1).unwrap(), 1);
+        assert_eq!(byte_offset_to_utf16_value(&h, 5).unwrap(), 3);
+        assert_eq!(utf16_offset_to_byte_value(&h, 0).unwrap(), 0);
+        assert_eq!(utf16_offset_to_byte_value(&h, 1).unwrap(), 1);
+        assert_eq!(utf16_offset_to_byte_value(&h, 3).unwrap(), 5);
+        assert_eq!(h.get_text_byte_length(), 6.0);
     }
 
     #[test]

@@ -4,7 +4,9 @@
 //! and pixel coordinates. No DOM or Canvas dependency.
 
 use neco_textview::{LineIndex, Selection, TextViewError};
-use neco_wrap::WrapMap;
+use neco_wrap::{
+    LayoutMode, LineLayoutPolicy, VisualLayoutSpace, WidthPolicy, WrapMap, WrapPolicy,
+};
 use std::fmt;
 
 /// Host-injected font metrics. Plain struct (parameter bag).
@@ -29,6 +31,33 @@ pub struct Rect {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VisualLineFrame {
+    layout: VisualLayoutSpace,
+}
+
+impl VisualLineFrame {
+    pub const fn logical_line(&self) -> u32 {
+        self.layout.logical_line()
+    }
+
+    pub const fn visual_line(&self) -> u32 {
+        self.layout.visual_line()
+    }
+
+    pub const fn inline_advance(&self) -> u32 {
+        self.layout.inline_advance()
+    }
+
+    pub const fn block_advance(&self) -> u32 {
+        self.layout.block_advance()
+    }
+
+    pub const fn layout_mode(&self) -> LayoutMode {
+        self.layout.layout_mode()
+    }
 }
 
 /// Errors returned by viewport operations.
@@ -65,17 +94,15 @@ impl From<TextViewError> for ViewportError {
 // ---------------------------------------------------------------------------
 
 /// Compute the visual width in pixels of `text[start_byte..end_byte]` considering tabs.
-fn text_width(text: &str, start_byte: usize, end_byte: usize, metrics: &ViewportMetrics) -> f64 {
+fn text_width(
+    text: &str,
+    start_byte: usize,
+    end_byte: usize,
+    metrics: &ViewportMetrics,
+    width_policy: &WidthPolicy,
+) -> f64 {
     let slice = &text[start_byte..end_byte];
-    let mut width = 0.0;
-    for ch in slice.chars() {
-        if ch == '\t' {
-            width += f64::from(metrics.tab_width) * metrics.char_width;
-        } else {
-            width += metrics.char_width;
-        }
-    }
-    width
+    f64::from(width_policy.text_width(slice)) * metrics.char_width
 }
 
 fn u32_to_usize(v: u32) -> usize {
@@ -137,6 +164,26 @@ pub fn caret_rect(
     metrics: &ViewportMetrics,
     layout: &ViewportLayout,
 ) -> Result<Rect, ViewportError> {
+    caret_rect_with_width_policy(
+        text,
+        offset,
+        line_index,
+        wrap_map,
+        metrics,
+        layout,
+        &WidthPolicy::cjk_grid(metrics.tab_width),
+    )
+}
+
+pub fn caret_rect_with_width_policy(
+    text: &str,
+    offset: usize,
+    line_index: &LineIndex,
+    wrap_map: &WrapMap,
+    metrics: &ViewportMetrics,
+    layout: &ViewportLayout,
+    width_policy: &WidthPolicy,
+) -> Result<Rect, ViewportError> {
     let line = line_index.line_of_offset(offset)?;
     let line_range = line_index.line_range(line)?;
     let byte_in_line = offset - line_range.start();
@@ -149,7 +196,7 @@ pub fn caret_rect(
     let (_, vl_start_in_line) = wrap_map.from_visual_line(visual_line);
     let vl_start_abs = line_range.start() + u32_to_usize(vl_start_in_line);
 
-    let x = layout.content_left + text_width(text, vl_start_abs, offset, metrics);
+    let x = layout.content_left + text_width(text, vl_start_abs, offset, metrics, width_policy);
     let y = f64::from(visual_line) * metrics.line_height;
 
     Ok(Rect {
@@ -168,6 +215,26 @@ pub fn selection_rects(
     wrap_map: &WrapMap,
     metrics: &ViewportMetrics,
     layout: &ViewportLayout,
+) -> Result<Vec<Rect>, ViewportError> {
+    selection_rects_with_width_policy(
+        text,
+        selection,
+        line_index,
+        wrap_map,
+        metrics,
+        layout,
+        &WidthPolicy::cjk_grid(metrics.tab_width),
+    )
+}
+
+pub fn selection_rects_with_width_policy(
+    text: &str,
+    selection: &Selection,
+    line_index: &LineIndex,
+    wrap_map: &WrapMap,
+    metrics: &ViewportMetrics,
+    layout: &ViewportLayout,
+    width_policy: &WidthPolicy,
 ) -> Result<Vec<Rect>, ViewportError> {
     let range = selection.range();
     if range.is_empty() {
@@ -219,8 +286,9 @@ pub fn selection_rects(
             continue;
         }
 
-        let x = layout.content_left + text_width(text, vl_start_abs, sel_start, metrics);
-        let w = text_width(text, sel_start, sel_end, metrics);
+        let x =
+            layout.content_left + text_width(text, vl_start_abs, sel_start, metrics, width_policy);
+        let w = text_width(text, sel_start, sel_end, metrics, width_policy);
         let y = f64::from(vl) * metrics.line_height;
 
         rects.push(Rect {
@@ -245,6 +313,31 @@ pub fn hit_test(
     wrap_map: &WrapMap,
     metrics: &ViewportMetrics,
     layout: &ViewportLayout,
+) -> usize {
+    hit_test_with_width_policy(
+        x,
+        y,
+        scroll_top,
+        text,
+        line_index,
+        wrap_map,
+        metrics,
+        layout,
+        &WidthPolicy::cjk_grid(metrics.tab_width),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn hit_test_with_width_policy(
+    x: f64,
+    y: f64,
+    scroll_top: f64,
+    text: &str,
+    line_index: &LineIndex,
+    wrap_map: &WrapMap,
+    metrics: &ViewportMetrics,
+    layout: &ViewportLayout,
+    width_policy: &WidthPolicy,
 ) -> usize {
     let total_vl = wrap_map.total_visual_lines();
     if total_vl == 0 {
@@ -282,11 +375,7 @@ pub fn hit_test(
     let slice = &text[vl_start_abs..vl_end_abs];
     let mut accum = 0.0;
     for (i, ch) in slice.char_indices() {
-        let cw = if ch == '\t' {
-            f64::from(metrics.tab_width) * metrics.char_width
-        } else {
-            metrics.char_width
-        };
+        let cw = f64::from(width_policy.advance_of(ch)) * metrics.char_width;
         // If click is within the first half of the character, place caret before it.
         if rel_x < accum + cw * 0.5 {
             return vl_start_abs + i;
@@ -307,6 +396,54 @@ pub fn gutter_width(total_lines: u32, metrics: &ViewportMetrics) -> f64 {
 /// Return the Y pixel coordinate for the top of `visual_line`.
 pub fn line_top(visual_line: u32, metrics: &ViewportMetrics) -> f64 {
     f64::from(visual_line) * metrics.line_height
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn visual_line_frame(
+    text: &str,
+    visual_line: u32,
+    line_index: &LineIndex,
+    wrap_map: &WrapMap,
+    _metrics: &ViewportMetrics,
+    _layout: &ViewportLayout,
+    width_policy: &WidthPolicy,
+    line_layout_policy: &LineLayoutPolicy,
+) -> Result<VisualLineFrame, ViewportError> {
+    let (logical_line, vl_start_in_line) = wrap_map.from_visual_line(visual_line);
+    let line_range = line_index.line_range(logical_line)?;
+    let total_vl = wrap_map.total_visual_lines();
+    let vl_end_in_line = if visual_line + 1 < total_vl {
+        let (next_logical_line, next_start_in_line) = wrap_map.from_visual_line(visual_line + 1);
+        if next_logical_line == logical_line {
+            next_start_in_line
+        } else {
+            u32::try_from(line_range.end() - line_range.start()).expect("line length fits u32")
+        }
+    } else {
+        u32::try_from(line_range.end() - line_range.start()).expect("line length fits u32")
+    };
+    let line_text = &text[line_range.start()..line_range.end()];
+    let local_visual_line = visual_line - wrap_map.to_visual_line(logical_line, 0);
+    let wrap_policy = WrapPolicy::code_with_width_policy(*width_policy);
+    let visual_layout = wrap_map.visual_layout_space(
+        logical_line,
+        local_visual_line,
+        line_text,
+        &wrap_policy,
+        line_layout_policy,
+    );
+    debug_assert_eq!(
+        visual_layout.inline_advance(),
+        line_layout_policy.redistributed_inline_width(
+            width_policy.text_width(
+                &line_text[u32_to_usize(vl_start_in_line)..u32_to_usize(vl_end_in_line)]
+            ),
+            wrap_map.max_width(),
+        )
+    );
+    Ok(VisualLineFrame {
+        layout: visual_layout,
+    })
 }
 
 /// Compute a new `scroll_top` that reveals the caret at `offset`, or `None` if already visible.
@@ -343,7 +480,7 @@ pub fn scroll_to_reveal(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neco_wrap::{WrapMap, WrapPolicy};
+    use neco_wrap::{LineLayoutPolicy, WidthPolicy, WrapMap, WrapPolicy};
 
     fn default_metrics() -> ViewportMetrics {
         ViewportMetrics {
@@ -351,6 +488,14 @@ mod tests {
             char_width: 8.0,
             tab_width: 4,
         }
+    }
+
+    fn default_width_policy() -> WidthPolicy {
+        WidthPolicy::cjk_grid(4)
+    }
+
+    fn default_line_layout_policy() -> LineLayoutPolicy {
+        LineLayoutPolicy::horizontal_ltr()
     }
 
     fn default_layout() -> ViewportLayout {
@@ -435,8 +580,10 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
-        let r = caret_rect(text, 0, &li, &wm, &metrics, &layout).unwrap();
+        let r = caret_rect_with_width_policy(text, 0, &li, &wm, &metrics, &layout, &width_policy)
+            .unwrap();
         assert!((r.x - layout.content_left).abs() < f64::EPSILON);
         assert!((r.y - 0.0).abs() < f64::EPSILON);
         assert!((r.height - 20.0).abs() < f64::EPSILON);
@@ -449,9 +596,11 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // offset 3 = 'l' in "hello", x = content_left + 3 * char_width
-        let r = caret_rect(text, 3, &li, &wm, &metrics, &layout).unwrap();
+        let r = caret_rect_with_width_policy(text, 3, &li, &wm, &metrics, &layout, &width_policy)
+            .unwrap();
         let expected_x = layout.content_left + 3.0 * metrics.char_width;
         assert!((r.x - expected_x).abs() < f64::EPSILON);
         assert!((r.y - 0.0).abs() < f64::EPSILON);
@@ -464,9 +613,11 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // offset 6 = start of "world", visual line 1.
-        let r = caret_rect(text, 6, &li, &wm, &metrics, &layout).unwrap();
+        let r = caret_rect_with_width_policy(text, 6, &li, &wm, &metrics, &layout, &width_policy)
+            .unwrap();
         assert!((r.x - layout.content_left).abs() < f64::EPSILON);
         assert!((r.y - 20.0).abs() < f64::EPSILON);
     }
@@ -480,9 +631,11 @@ mod tests {
         let wm = make_wrap_map(text, 4);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // offset 4 = 'd' in "cd ", which is on visual line 1, column 1.
-        let r = caret_rect(text, 4, &li, &wm, &metrics, &layout).unwrap();
+        let r = caret_rect_with_width_policy(text, 4, &li, &wm, &metrics, &layout, &width_policy)
+            .unwrap();
         let expected_x = layout.content_left + 1.0 * metrics.char_width;
         assert!((r.x - expected_x).abs() < f64::EPSILON);
         assert!((r.y - 20.0).abs() < f64::EPSILON);
@@ -499,9 +652,10 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // Click at start of first line.
-        let offset = hit_test(
+        let offset = hit_test_with_width_policy(
             layout.content_left,
             0.0,
             0.0,
@@ -510,6 +664,7 @@ mod tests {
             &wm,
             &metrics,
             &layout,
+            &width_policy,
         );
         assert_eq!(offset, 0);
     }
@@ -521,10 +676,21 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // Click at x = content_left + 2.5 * char_width -> offset 3 (past midpoint of char 2).
         let x = layout.content_left + 2.5 * metrics.char_width;
-        let offset = hit_test(x, 0.0, 0.0, text, &li, &wm, &metrics, &layout);
+        let offset = hit_test_with_width_policy(
+            x,
+            0.0,
+            0.0,
+            text,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        );
         assert_eq!(offset, 3);
     }
 
@@ -535,9 +701,20 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // Click in gutter (x=0), second line (y=25).
-        let offset = hit_test(0.0, 25.0, 0.0, text, &li, &wm, &metrics, &layout);
+        let offset = hit_test_with_width_policy(
+            0.0,
+            25.0,
+            0.0,
+            text,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        );
         assert_eq!(offset, 6); // start of "world"
     }
 
@@ -548,9 +725,10 @@ mod tests {
         let wm = make_wrap_map(text, 4);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // Click on visual line 2 (y=40..60), at content_left -> offset 6 ("ef").
-        let offset = hit_test(
+        let offset = hit_test_with_width_policy(
             layout.content_left,
             45.0,
             0.0,
@@ -559,6 +737,7 @@ mod tests {
             &wm,
             &metrics,
             &layout,
+            &width_policy,
         );
         assert_eq!(offset, 6);
     }
@@ -570,9 +749,10 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // Click far to the right.
-        let offset = hit_test(
+        let offset = hit_test_with_width_policy(
             layout.content_left + 500.0,
             0.0,
             0.0,
@@ -581,6 +761,7 @@ mod tests {
             &wm,
             &metrics,
             &layout,
+            &width_policy,
         );
         assert_eq!(offset, 2);
     }
@@ -696,9 +877,19 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         let sel = Selection::cursor(2);
-        let rects = selection_rects(text, &sel, &li, &wm, &metrics, &layout).unwrap();
+        let rects = selection_rects_with_width_policy(
+            text,
+            &sel,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        )
+        .unwrap();
         assert!(rects.is_empty());
     }
 
@@ -709,9 +900,19 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         let sel = Selection::new(1, 4); // "ell"
-        let rects = selection_rects(text, &sel, &li, &wm, &metrics, &layout).unwrap();
+        let rects = selection_rects_with_width_policy(
+            text,
+            &sel,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        )
+        .unwrap();
         assert_eq!(rects.len(), 1);
         let r = &rects[0];
         let expected_x = layout.content_left + 1.0 * metrics.char_width;
@@ -726,10 +927,20 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         // Select from middle of line 0 to middle of line 2.
         let sel = Selection::new(1, 9); // "aa\nbbb\nc"
-        let rects = selection_rects(text, &sel, &li, &wm, &metrics, &layout).unwrap();
+        let rects = selection_rects_with_width_policy(
+            text,
+            &sel,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        )
+        .unwrap();
         assert_eq!(rects.len(), 3);
     }
 
@@ -744,11 +955,31 @@ mod tests {
         let wm = make_wrap_map(text, 80);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         for offset in [0, 3, 5, 6, 9, 11] {
-            let r = caret_rect(text, offset, &li, &wm, &metrics, &layout).unwrap();
+            let r = caret_rect_with_width_policy(
+                text,
+                offset,
+                &li,
+                &wm,
+                &metrics,
+                &layout,
+                &width_policy,
+            )
+            .unwrap();
             // Hit test at the caret position should return the same offset.
-            let got = hit_test(r.x, r.y, 0.0, text, &li, &wm, &metrics, &layout);
+            let got = hit_test_with_width_policy(
+                r.x,
+                r.y,
+                0.0,
+                text,
+                &li,
+                &wm,
+                &metrics,
+                &layout,
+                &width_policy,
+            );
             assert_eq!(got, offset, "roundtrip failed at offset {offset}");
         }
     }
@@ -760,10 +991,30 @@ mod tests {
         let wm = make_wrap_map(text, 4);
         let metrics = default_metrics();
         let layout = default_layout();
+        let width_policy = default_width_policy();
 
         for offset in [0, 3, 6] {
-            let r = caret_rect(text, offset, &li, &wm, &metrics, &layout).unwrap();
-            let got = hit_test(r.x, r.y, 0.0, text, &li, &wm, &metrics, &layout);
+            let r = caret_rect_with_width_policy(
+                text,
+                offset,
+                &li,
+                &wm,
+                &metrics,
+                &layout,
+                &width_policy,
+            )
+            .unwrap();
+            let got = hit_test_with_width_policy(
+                r.x,
+                r.y,
+                0.0,
+                text,
+                &li,
+                &wm,
+                &metrics,
+                &layout,
+                &width_policy,
+            );
             assert_eq!(got, offset, "roundtrip failed at offset {offset}");
         }
     }
@@ -775,16 +1026,100 @@ mod tests {
     #[test]
     fn text_width_with_tabs() {
         let metrics = default_metrics();
+        let width_policy = default_width_policy();
         let text = "a\tb";
         // 'a' = 8, '\t' = 4*8=32, 'b' = 8 -> total 48
-        let w = text_width(text, 0, text.len(), &metrics);
+        let w = text_width(text, 0, text.len(), &metrics, &width_policy);
         assert!((w - 48.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn text_width_empty() {
         let metrics = default_metrics();
-        let w = text_width("hello", 2, 2, &metrics);
+        let width_policy = default_width_policy();
+        let w = text_width("hello", 2, 2, &metrics, &width_policy);
         assert!((w - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn caret_rect_uses_shared_width_policy_for_cjk_grid() {
+        let text = "aあ";
+        let li = LineIndex::new(text);
+        let wm = make_wrap_map(text, 80);
+        let metrics = default_metrics();
+        let layout = default_layout();
+        let width_policy = WidthPolicy::cjk_grid(4);
+
+        let r = caret_rect_with_width_policy(
+            text,
+            "aあ".len(),
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        )
+        .unwrap();
+
+        let expected_x = layout.content_left + 3.0 * metrics.char_width;
+        assert!((r.x - expected_x).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn visual_line_frame_exposes_visual_layout_space() {
+        let text = "ab cd";
+        let li = LineIndex::new(text);
+        let wm = make_wrap_map(text, 3);
+        let metrics = default_metrics();
+        let layout = default_layout();
+        let width_policy = default_width_policy();
+
+        let frame = visual_line_frame(
+            text,
+            1,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+            &default_line_layout_policy(),
+        )
+        .unwrap();
+
+        assert_eq!(frame.logical_line(), 0);
+        assert_eq!(frame.visual_line(), 1);
+        assert_eq!(frame.inline_advance(), 2);
+        assert_eq!(frame.block_advance(), 1);
+        assert_eq!(frame.layout_mode(), LayoutMode::HorizontalLtr);
+    }
+
+    #[test]
+    fn visual_line_frame_uses_line_layout_policy_width_redistribution() {
+        fn justify_to_max(_line_width: u32, max_width: u32) -> u32 {
+            max_width
+        }
+
+        let text = "ab";
+        let li = LineIndex::new(text);
+        let wm = make_wrap_map(text, 6);
+        let metrics = default_metrics();
+        let layout = default_layout();
+        let width_policy = default_width_policy();
+        let line_layout_policy = LineLayoutPolicy::new(LayoutMode::HorizontalLtr, justify_to_max);
+
+        let frame = visual_line_frame(
+            text,
+            0,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+            &line_layout_policy,
+        )
+        .unwrap();
+
+        assert_eq!(frame.inline_advance(), 6);
+        assert_eq!(frame.layout_mode(), LayoutMode::HorizontalLtr);
     }
 }

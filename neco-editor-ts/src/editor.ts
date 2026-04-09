@@ -3,6 +3,7 @@ import type {
   RenderLine,
   RangeChange,
   Rect,
+  VisualLineFrame,
   SearchMatchInfo,
   IndentInfo,
   BracketPair,
@@ -59,6 +60,10 @@ export class EditorSession {
     return this.handle.getSelectionRects(anchor, head) as Rect[]
   }
 
+  getVisualLineFrame(visualLine: number): VisualLineFrame {
+    return this.handle.getVisualLineFrame(visualLine) as VisualLineFrame
+  }
+
   hitTest(x: number, y: number, scrollTop: number): number {
     return this.handle.hitTest(x, y, scrollTop)
   }
@@ -86,6 +91,18 @@ export class EditorSession {
 
   getText(): string {
     return this.handle.getText()
+  }
+
+  getTextByteLength(): number {
+    return this.handle.getTextByteLength()
+  }
+
+  byteOffsetToUtf16(offset: number): number {
+    return this.handle.byteOffsetToUtf16(offset)
+  }
+
+  utf16OffsetToByte(offset: number): number {
+    return this.handle.utf16OffsetToByte(offset)
   }
 
   isDirty(): boolean {

@@ -4,10 +4,9 @@ import { Renderer, type RendererOptions } from './renderer'
 import { ScrollManager, type ScrollState } from './scroll'
 import { InputHandler, type InputCommand } from './input'
 import { MouseHandler, type MouseCommand } from './mouse'
-import { wordBoundary } from './mouse'
 import { ClipboardHandler, type ClipboardCallbacks } from './clipboard'
 import type { RangeChange, Rect, SearchMatchInfo, SearchOptions } from './types'
-import { CoordinateMap, docY, toViewY } from './coordinates'
+import { CoordinateMap, docY, screenRect, toViewY } from './coordinates'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -174,7 +173,7 @@ export class EditorView {
     }
     this.renderer = new Renderer(this.container, rendererOpts)
 
-    // 6. ScrollManager — uses renderer's content element as scroll container
+    // 6. ScrollManager: uses renderer's content element as scroll container
     const contentEl = this.renderer.getContentElement()
     const containerRect = contentEl.getBoundingClientRect()
     this.scrollManager = new ScrollManager(contentEl, {
@@ -186,17 +185,26 @@ export class EditorView {
     this.updateTotalLines()
 
     // 7. InputHandler
-    this.inputHandler = new InputHandler(this.container, (cmd) => this.handleInputCommand(cmd))
+    this.inputHandler = new InputHandler(contentEl, (cmd) => this.handleInputCommand(cmd))
 
     // 8. MouseHandler
     this.mouseHandler = new MouseHandler(
       this.container,
       {
         hitTest: (x, y) => {
-          // x: ContX (container-relative), y: ViewY (viewport-relative, after mouse.ts fix)
-          const gw = (this.options.lineNumbers !== false) ? this.session.getGutterWidth() : 0
-          // WASM hit_test expects: x=DocX (content-relative), y=ViewY, scroll_top
-          return this.session.hitTest(x - gw, y, this.scrollManager.getScrollState().scrollTop)
+          const scrollTop = this.scrollManager.getScrollState().scrollTop
+          const coords = new CoordinateMap({
+            gutterWidth: (this.options.lineNumbers !== false) ? this.session.getGutterWidth() : 0,
+            scrollTop,
+            padTop: this.options.padding?.top ?? 0,
+            lineHeight: this.lineHeight,
+            devicePixelRatio: window.devicePixelRatio || 1,
+          })
+          return this.session.hitTest(
+            coords.containerToViewportX(x),
+            coords.containerToViewportY(y),
+            scrollTop,
+          )
         },
         getScrollTop: () => this.scrollManager.getScrollState().scrollTop,
         getText: () => this.session.getText(),
@@ -211,7 +219,10 @@ export class EditorView {
         const text = this.session.getText()
         const start = Math.min(this.selectionAnchor, this.cursorOffset)
         const end = Math.max(this.selectionAnchor, this.cursorOffset)
-        return text.substring(start, end)
+        return text.substring(
+          this.session.byteOffsetToUtf16(start),
+          this.session.byteOffsetToUtf16(end),
+        )
       },
       getSelection: () => {
         if (this.selectionAnchor === null) return null
@@ -246,7 +257,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — State
+  // Public API: State
   // =========================================================================
 
   getSession(): EditorSession {
@@ -266,7 +277,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Editing
+  // Public API: Editing
   // =========================================================================
 
   applyEdit(start: number, end: number, newText: string, label?: string): RangeChange[] {
@@ -274,9 +285,8 @@ export class EditorView {
 
     const changes = this.session.applyEdit(start, end, newText, label)
 
-    // Move cursor to end of inserted text
-    const newCursorOffset = start + newText.length
-    this.cursorOffset = newCursorOffset
+    const lastChange = changes[changes.length - 1]
+    this.cursorOffset = lastChange ? lastChange.newEnd : start + utf8ByteLength(newText)
     this.selectionAnchor = null
 
     this.updateTotalLines()
@@ -294,7 +304,7 @@ export class EditorView {
     const result = this.session.undo()
     if (result) {
       // Clamp cursor and selection anchor to new text length
-      const len = this.session.getText().length
+      const len = this.session.getTextByteLength()
       this.cursorOffset = Math.min(this.cursorOffset, len)
       if (this.selectionAnchor !== null) {
         this.selectionAnchor = Math.min(this.selectionAnchor, len)
@@ -314,7 +324,7 @@ export class EditorView {
     const result = this.session.redo()
     if (result) {
       // Clamp cursor and selection anchor to new text length
-      const len = this.session.getText().length
+      const len = this.session.getTextByteLength()
       this.cursorOffset = Math.min(this.cursorOffset, len)
       if (this.selectionAnchor !== null) {
         this.selectionAnchor = Math.min(this.selectionAnchor, len)
@@ -329,21 +339,20 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Cursor / Selection
+  // Public API: Cursor / Selection
   // =========================================================================
 
   setCursor(offset: number): void {
-    const text = this.session.getText()
-    this.cursorOffset = clamp(offset, 0, text.length)
+    this.cursorOffset = clamp(offset, 0, this.session.getTextByteLength())
     this.selectionAnchor = null
     this.cursorPositionChange.fire(this.cursorOffset)
     this.scheduleRender()
   }
 
   setSelection(anchor: number, head: number): void {
-    const text = this.session.getText()
-    this.selectionAnchor = clamp(anchor, 0, text.length)
-    this.cursorOffset = clamp(head, 0, text.length)
+    const len = this.session.getTextByteLength()
+    this.selectionAnchor = clamp(anchor, 0, len)
+    this.cursorOffset = clamp(head, 0, len)
     this.selectionChange.fire({ anchor: this.selectionAnchor, head: this.cursorOffset })
     this.cursorPositionChange.fire(this.cursorOffset)
     this.scheduleRender()
@@ -359,8 +368,16 @@ export class EditorView {
     return { anchor: this.selectionAnchor, head: this.cursorOffset }
   }
 
+  private byteOffsetToUtf16(offset: number): number {
+    return this.session.byteOffsetToUtf16(offset)
+  }
+
+  private utf16OffsetToByte(offset: number): number {
+    return this.session.utf16OffsetToByte(offset)
+  }
+
   // =========================================================================
-  // Public API — Scroll
+  // Public API: Scroll
   // =========================================================================
 
   revealOffset(offset: number): void {
@@ -399,7 +416,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — View State
+  // Public API: View State
   // =========================================================================
 
   saveViewState(): EditorViewState {
@@ -418,7 +435,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Options
+  // Public API: Options
   // =========================================================================
 
   updateOptions(opts: Partial<EditorViewOptions>): void {
@@ -439,7 +456,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Search
+  // Public API: Search
   // =========================================================================
 
   search(pattern: string, options?: SearchOptions): SearchMatchInfo[] {
@@ -451,7 +468,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Events
+  // Public API: Events
   // =========================================================================
 
   onDidChangeContent(callback: (changes: RangeChange[] | null) => void): Disposable {
@@ -479,7 +496,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Focus
+  // Public API: Focus
   // =========================================================================
 
   focus(): void {
@@ -491,7 +508,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Layout & Metrics
+  // Public API: Layout & Metrics
   // =========================================================================
 
   updateMetrics(): void {
@@ -518,7 +535,7 @@ export class EditorView {
   }
 
   // =========================================================================
-  // Public API — Lifecycle
+  // Public API: Lifecycle
   // =========================================================================
 
   dispose(): void {
@@ -598,7 +615,7 @@ export class EditorView {
         this.redo()
         break
       case 'selectAll':
-        this.setSelection(0, this.session.getText().length)
+        this.setSelection(0, this.session.getTextByteLength())
         break
       case 'moveCursor':
         this.handleMoveCursor(cmd.direction, cmd.extend)
@@ -642,7 +659,11 @@ export class EditorView {
         break
       case 'selectWord': {
         const text = this.session.getText()
-        const [start, end] = wordBoundary(text, cmd.offset)
+        const [start, end] = wordBoundary(
+          text,
+          this.byteOffsetToUtf16(cmd.offset),
+          (utf16) => this.utf16OffsetToByte(utf16),
+        )
         if (start !== end) {
           this.setSelection(start, end)
         } else {
@@ -667,7 +688,7 @@ export class EditorView {
         const closeChar = String.fromCharCode(closeCode)
         const changes = this.applyEdit(start, end, text + closeChar, 'type')
         // Place cursor between the opening and closing bracket
-        this.cursorOffset = start + text.length
+        this.cursorOffset = start + utf8ByteLength(text)
         this.cursorPositionChange.fire(this.cursorOffset)
         // applyEdit already called scheduleRender, revealCursor, etc.
         // but we need to re-fire since we moved the cursor after applyEdit
@@ -694,10 +715,22 @@ export class EditorView {
     const text = this.session.getText()
     if (direction === 'backward') {
       if (this.cursorOffset <= 0) return
-      this.applyEdit(this.cursorOffset - 1, this.cursorOffset, '', 'delete')
+      const utf16 = this.byteOffsetToUtf16(this.cursorOffset)
+      this.applyEdit(
+        this.utf16OffsetToByte(previousUtf16Boundary(text, utf16)),
+        this.cursorOffset,
+        '',
+        'delete',
+      )
     } else {
-      if (this.cursorOffset >= text.length) return
-      this.applyEdit(this.cursorOffset, this.cursorOffset + 1, '', 'delete')
+      if (this.cursorOffset >= this.session.getTextByteLength()) return
+      const utf16 = this.byteOffsetToUtf16(this.cursorOffset)
+      this.applyEdit(
+        this.cursorOffset,
+        this.utf16OffsetToByte(nextUtf16Boundary(text, utf16)),
+        '',
+        'delete',
+      )
     }
   }
 
@@ -727,14 +760,18 @@ export class EditorView {
         if (!extend && this.selectionAnchor !== null && this.selectionAnchor !== this.cursorOffset) {
           newOffset = Math.min(this.selectionAnchor, this.cursorOffset)
         } else {
-          newOffset = Math.max(0, this.cursorOffset - 1)
+          newOffset = this.utf16OffsetToByte(
+            previousUtf16Boundary(text, this.byteOffsetToUtf16(this.cursorOffset)),
+          )
         }
         break
       case 'right':
         if (!extend && this.selectionAnchor !== null && this.selectionAnchor !== this.cursorOffset) {
           newOffset = Math.max(this.selectionAnchor, this.cursorOffset)
         } else {
-          newOffset = Math.min(text.length, this.cursorOffset + 1)
+          newOffset = this.utf16OffsetToByte(
+            nextUtf16Boundary(text, this.byteOffsetToUtf16(this.cursorOffset)),
+          )
         }
         break
       case 'up':
@@ -760,9 +797,17 @@ export class EditorView {
     let newOffset: number
 
     if (direction === 'left') {
-      newOffset = findWordBoundaryLeft(text, this.cursorOffset)
+      newOffset = findWordBoundaryLeft(
+        text,
+        this.byteOffsetToUtf16(this.cursorOffset),
+        (utf16) => this.utf16OffsetToByte(utf16),
+      )
     } else {
-      newOffset = findWordBoundaryRight(text, this.cursorOffset)
+      newOffset = findWordBoundaryRight(
+        text,
+        this.byteOffsetToUtf16(this.cursorOffset),
+        (utf16) => this.utf16OffsetToByte(utf16),
+      )
     }
 
     this.moveCursorTo(newOffset, extend)
@@ -774,24 +819,25 @@ export class EditorView {
 
     if (direction === 'start') {
       // Find the start of the current line
-      newOffset = this.cursorOffset
-      while (newOffset > 0 && text[newOffset - 1] !== '\n') {
-        newOffset--
+      let utf16 = this.byteOffsetToUtf16(this.cursorOffset)
+      while (utf16 > 0 && text[utf16 - 1] !== '\n') {
+        utf16--
       }
+      newOffset = this.utf16OffsetToByte(utf16)
     } else {
       // Find the end of the current line
-      newOffset = this.cursorOffset
-      while (newOffset < text.length && text[newOffset] !== '\n') {
-        newOffset++
+      let utf16 = this.byteOffsetToUtf16(this.cursorOffset)
+      while (utf16 < text.length && text[utf16] !== '\n') {
+        utf16++
       }
+      newOffset = this.utf16OffsetToByte(utf16)
     }
 
     this.moveCursorTo(newOffset, extend)
   }
 
   private handleMoveCursorToDocumentEdge(direction: 'start' | 'end', extend: boolean): void {
-    const text = this.session.getText()
-    const newOffset = direction === 'start' ? 0 : text.length
+    const newOffset = direction === 'start' ? 0 : this.session.getTextByteLength()
     this.moveCursorTo(newOffset, extend)
   }
 
@@ -853,6 +899,7 @@ export class EditorView {
       scrollTop: scrollState.scrollTop,
       padTop,
       lineHeight: this.lineHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
     })
     const contentRect = this.renderer.getContentRect()
     const height = contentRect.height > 0 ? contentRect.height : this.container.getBoundingClientRect().height
@@ -889,47 +936,39 @@ export class EditorView {
     // Render lines
     this.renderer.renderLines(lines, currentLineNumber)
 
-    // Render caret.
-    // WASM caret_rect returns x in content-relative space (0 = start of text column).
-    // contentEl now spans full editor width (left: 0), so we shift caret x by gutterWidth
-    // to paint it to the right of the gutter cell.
-    const gutterWidth = coords.gutterWidth
+    // Render caret and selection via the shared screen-space transform.
     if (caretRect) {
-      const adjustedCaret: Rect = {
-        x: caretRect.x + gutterWidth,
-        y: coords.docToAbsoluteY(docY(caretRect.y)),
-        width: caretRect.width,
-        height: caretRect.height,
+      const adjustedCaret = coords.docRectToScreenRect(caretRect)
+      this.inputHandler.setAnchorRect(adjustedCaret)
+      if (this.compositionText.length > 0) {
+        const compositionRight = this.renderer.renderComposition(this.compositionText, adjustedCaret)
+        this.renderer.renderCaret(
+          screenRect(
+            compositionRight,
+            adjustedCaret.y as number,
+            adjustedCaret.width as number,
+            adjustedCaret.height as number,
+          ),
+        )
+      } else {
+        this.renderer.clearComposition()
+        this.renderer.renderCaret(adjustedCaret)
       }
-      this.renderer.renderCaret(adjustedCaret)
     } else {
-      this.renderer.renderCaret({ x: 0, y: 0, width: 0, height: 0 })
+      this.inputHandler.setAnchorRect(screenRect(0, 0, 1, 1))
+      this.renderer.clearComposition()
+      this.renderer.renderCaret(screenRect(0, 0, 0, 0))
     }
 
     // Render selections (same content-space → container-space shift as caret)
     if (this.selectionAnchor !== null && this.selectionAnchor !== this.cursorOffset) {
       const selRects = this.session.getSelectionRects(this.selectionAnchor, this.cursorOffset)
-      const adjustedSelRects = selRects.map((r) => ({
-        x: r.x + gutterWidth,
-        y: coords.docToAbsoluteY(docY(r.y)),
-        width: r.width,
-        height: r.height,
-      }))
+      const adjustedSelRects = selRects.map((r) => coords.docRectToScreenRect(r))
       this.renderer.renderSelections(adjustedSelRects)
     } else {
       this.renderer.renderSelections([])
     }
 
-    if (caretRect && this.compositionText.length > 0) {
-      this.renderer.renderComposition(this.compositionText, {
-        x: caretRect.x + gutterWidth,
-        y: coords.docToAbsoluteY(docY(caretRect.y)),
-        width: caretRect.width,
-        height: caretRect.height,
-      })
-    } else {
-      this.renderer.clearComposition()
-    }
   }
 
   // =========================================================================
@@ -991,31 +1030,84 @@ function clamp(value: number, min: number, max: number): number {
 
 const WORD_RE = /\w/
 
-function findWordBoundaryLeft(text: string, offset: number): number {
-  if (offset <= 0) return 0
-  let pos = offset - 1
+function utf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).length
+}
+
+function previousUtf16Boundary(text: string, utf16Offset: number): number {
+  if (utf16Offset <= 0) return 0
+  const prev = text.charCodeAt(utf16Offset - 1)
+  if (
+    utf16Offset >= 2 &&
+    prev >= 0xdc00 &&
+    prev <= 0xdfff
+  ) {
+    const lead = text.charCodeAt(utf16Offset - 2)
+    if (lead >= 0xd800 && lead <= 0xdbff) {
+      return utf16Offset - 2
+    }
+  }
+  return utf16Offset - 1
+}
+
+function nextUtf16Boundary(text: string, utf16Offset: number): number {
+  if (utf16Offset >= text.length) return text.length
+  const cp = text.codePointAt(utf16Offset)
+  return utf16Offset + ((cp ?? 0) > 0xffff ? 2 : 1)
+}
+
+function findWordBoundaryLeft(
+  text: string,
+  utf16Offset: number,
+  utf16ToByte: (utf16: number) => number,
+): number {
+  if (utf16Offset <= 0) return 0
+  let pos = previousUtf16Boundary(text, utf16Offset)
   // Skip non-word characters
   while (pos > 0 && !WORD_RE.test(text.charAt(pos))) {
-    pos--
+    pos = previousUtf16Boundary(text, pos)
   }
   // Skip word characters
   while (pos > 0 && WORD_RE.test(text.charAt(pos - 1))) {
-    pos--
+    pos = previousUtf16Boundary(text, pos)
   }
-  return pos
+  return utf16ToByte(pos)
 }
 
-function findWordBoundaryRight(text: string, offset: number): number {
+function findWordBoundaryRight(
+  text: string,
+  utf16Offset: number,
+  utf16ToByte: (utf16: number) => number,
+): number {
   const len = text.length
-  if (offset >= len) return len
-  let pos = offset
+  if (utf16Offset >= len) return utf16ToByte(len)
+  let pos = utf16Offset
   // Skip word characters
   while (pos < len && WORD_RE.test(text.charAt(pos))) {
-    pos++
+    pos = nextUtf16Boundary(text, pos)
   }
   // Skip non-word characters
   while (pos < len && !WORD_RE.test(text.charAt(pos))) {
-    pos++
+    pos = nextUtf16Boundary(text, pos)
   }
-  return pos
+  return utf16ToByte(pos)
+}
+
+function wordBoundary(
+  text: string,
+  utf16Offset: number,
+  utf16ToByte: (utf16: number) => number,
+): [start: number, end: number] {
+  if (
+    utf16Offset < 0 ||
+    utf16Offset >= text.length ||
+    !WORD_RE.test(text.charAt(utf16Offset))
+  ) {
+    const byte = utf16ToByte(Math.max(0, Math.min(text.length, utf16Offset)))
+    return [byte, byte]
+  }
+  return [
+    findWordBoundaryLeft(text, utf16Offset, utf16ToByte),
+    findWordBoundaryRight(text, utf16Offset, utf16ToByte),
+  ]
 }
