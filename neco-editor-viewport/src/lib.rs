@@ -14,6 +14,7 @@ use std::fmt;
 pub struct ViewportMetrics {
     pub line_height: f64,
     pub char_width: f64,
+    pub cjk_char_width: f64,
     pub tab_width: u32,
 }
 
@@ -102,7 +103,21 @@ fn text_width(
     width_policy: &WidthPolicy,
 ) -> f64 {
     let slice = &text[start_byte..end_byte];
-    f64::from(width_policy.text_width(slice)) * metrics.char_width
+    slice
+        .chars()
+        .map(|ch| char_pixel_width(ch, metrics, width_policy))
+        .sum()
+}
+
+fn char_pixel_width(ch: char, metrics: &ViewportMetrics, width_policy: &WidthPolicy) -> f64 {
+    let advance = width_policy.advance_of(ch);
+    if ch == '\t' {
+        f64::from(advance) * metrics.char_width
+    } else if advance >= 2 {
+        metrics.cjk_char_width
+    } else {
+        metrics.char_width
+    }
 }
 
 fn u32_to_usize(v: u32) -> usize {
@@ -375,7 +390,7 @@ pub fn hit_test_with_width_policy(
     let slice = &text[vl_start_abs..vl_end_abs];
     let mut accum = 0.0;
     for (i, ch) in slice.char_indices() {
-        let cw = f64::from(width_policy.advance_of(ch)) * metrics.char_width;
+        let cw = char_pixel_width(ch, metrics, width_policy);
         // If click is within the first half of the character, place caret before it.
         if rel_x < accum + cw * 0.5 {
             return vl_start_abs + i;
@@ -486,6 +501,7 @@ mod tests {
         ViewportMetrics {
             line_height: 20.0,
             char_width: 8.0,
+            cjk_char_width: 14.0,
             tab_width: 4,
         }
     }
@@ -1042,7 +1058,66 @@ mod tests {
     }
 
     #[test]
-    fn caret_rect_uses_shared_width_policy_for_cjk_grid() {
+    fn text_width_uses_measured_cjk_width_without_changing_tabs() {
+        let metrics = default_metrics();
+        let width_policy = default_width_policy();
+        let text = "aあ\tb";
+
+        let w = text_width(text, 0, text.len(), &metrics, &width_policy);
+
+        assert!((w - 62.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn caret_rect_uses_measured_cjk_width() {
+        let text = "aあ";
+        let li = LineIndex::new(text);
+        let wm = make_wrap_map(text, 80);
+        let metrics = default_metrics();
+        let layout = default_layout();
+        let width_policy = WidthPolicy::cjk_grid(4);
+
+        let r = caret_rect_with_width_policy(
+            text,
+            text.len(),
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        )
+        .unwrap();
+
+        let expected_x = layout.content_left + 22.0;
+        assert!((r.x - expected_x).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn hit_test_uses_measured_cjk_width() {
+        let text = "aあb";
+        let li = LineIndex::new(text);
+        let wm = make_wrap_map(text, 80);
+        let metrics = default_metrics();
+        let layout = default_layout();
+        let width_policy = WidthPolicy::cjk_grid(4);
+
+        let got = hit_test_with_width_policy(
+            layout.content_left + 23.0,
+            0.0,
+            0.0,
+            text,
+            &li,
+            &wm,
+            &metrics,
+            &layout,
+            &width_policy,
+        );
+
+        assert_eq!(got, "aあ".len());
+    }
+
+    #[test]
+    fn caret_rect_uses_measured_width_for_cjk_grid() {
         let text = "aあ";
         let li = LineIndex::new(text);
         let wm = make_wrap_map(text, 80);
@@ -1061,7 +1136,7 @@ mod tests {
         )
         .unwrap();
 
-        let expected_x = layout.content_left + 3.0 * metrics.char_width;
+        let expected_x = layout.content_left + metrics.char_width + metrics.cjk_char_width;
         assert!((r.x - expected_x).abs() < f64::EPSILON);
     }
 

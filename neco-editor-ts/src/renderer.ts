@@ -6,6 +6,30 @@ export interface RendererOptions {
   gutterWidth: number
   showLineNumbers: boolean
   padding?: { top?: number; bottom?: number }
+  metrics?: RendererMetrics
+}
+
+export interface RendererMetrics {
+  lineHeight: number
+  charWidth: number
+  cjkCharWidth: number
+  tabSize: number
+  monospaceGrid: boolean
+}
+
+export interface EditorRenderer {
+  renderLines(lines: RenderLine[], currentLineNumber: number): void
+  renderCaret(rect: ScreenRect): void
+  renderSelections(rects: ScreenRect[]): void
+  renderComposition(text: string, rect: ScreenRect): number
+  clearComposition(): void
+  updateGutterWidth(width: number): void
+  updateMetrics(metrics: RendererMetrics): void
+  getContentElement(): HTMLElement
+  getLinesElement(): HTMLElement
+  getContentRect(): { width: number; height: number }
+  clear(): void
+  dispose(): void
 }
 
 /**
@@ -18,7 +42,7 @@ export interface RendererOptions {
  * (no incremental diffing). This is the simplest correct approach and a
  * future optimisation point.
  */
-export class Renderer {
+export class DomRenderer implements EditorRenderer {
   private container: HTMLElement
   private options: RendererOptions
 
@@ -205,6 +229,10 @@ export class Renderer {
     this.container.style.setProperty('--neco-gutter-width', `${width}px`)
   }
 
+  updateMetrics(_metrics: RendererMetrics): void {
+    // DOM layout uses CSS font metrics directly; WASM metrics are updated by EditorView.
+  }
+
   /** Return the content container element (used as scroll container). */
   getContentElement(): HTMLElement {
     return this.contentEl
@@ -242,3 +270,5 @@ export class Renderer {
     this.container.style.removeProperty('--neco-gutter-width')
   }
 }
+
+export { DomRenderer as Renderer }

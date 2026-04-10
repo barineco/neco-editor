@@ -78,5 +78,6 @@ export interface SearchOptions {
 /** Measured dimensions for a monospace font at a given size. */
 export interface FontMetrics {
   charWidth: number
+  cjkCharWidth: number
   lineHeight: number
 }

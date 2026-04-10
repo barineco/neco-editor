@@ -1,6 +1,7 @@
 import { EditorSession } from './editor'
 import { measureFontMetrics } from './metrics'
-import { Renderer, type RendererOptions } from './renderer'
+import { DomRenderer, type EditorRenderer, type RendererMetrics, type RendererOptions } from './renderer'
+import { WebGpuRenderer } from './webgpu-renderer'
 import { ScrollManager, type ScrollState } from './scroll'
 import { InputHandler, type InputCommand } from './input'
 import { MouseHandler, type MouseCommand } from './mouse'
@@ -25,6 +26,10 @@ export interface EditorViewOptions {
   readOnly?: boolean
   /** Tab size in spaces. */
   tabSize?: number
+  /** Strict 1:2 half-width/full-width grid. */
+  monospaceGrid?: boolean
+  /** Renderer backend. WebGPU is the default and fails explicitly when unavailable. */
+  renderer?: 'webgpu' | 'dom'
   /** Word-wrap mode (reserved for future use). */
   wordWrap?: boolean
   /** Show line numbers in the gutter. */
@@ -100,10 +105,11 @@ export class EditorView {
   private tabSize: number
   private lineHeight = 0
   private charWidth = 0
+  private cjkCharWidth = 0
   private compositionText = ''
 
   // -- Sub-modules ----------------------------------------------------------
-  private renderer: Renderer
+  private renderer: EditorRenderer
   private scrollManager: ScrollManager
   private inputHandler: InputHandler
   private mouseHandler: MouseHandler
@@ -139,6 +145,7 @@ export class EditorView {
     // 2. Measure font metrics
     const metrics = measureFontMetrics(this.container, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE)
     this.charWidth = metrics.charWidth
+    this.cjkCharWidth = metrics.cjkCharWidth
     this.lineHeight = metrics.lineHeight
 
     // 3. Create or reuse EditorSession
@@ -150,12 +157,13 @@ export class EditorView {
         options.language ?? 'plain',
         this.lineHeight,
         this.charWidth,
+        this.effectiveCjkCharWidth(),
         this.tabSize,
       )
     }
 
     // 4. Update metrics on session
-    this.session.updateMetrics(this.lineHeight, this.charWidth, this.tabSize)
+    this.updateSessionMetrics()
 
     // Apply readOnly if specified
     if (options.readOnly) {
@@ -170,8 +178,9 @@ export class EditorView {
       gutterWidth,
       showLineNumbers: options.lineNumbers !== false,
       padding: options.padding,
+      metrics: this.rendererMetrics(),
     }
-    this.renderer = new Renderer(this.container, rendererOpts)
+    this.renderer = this.createRenderer(rendererOpts)
 
     // 6. ScrollManager: uses renderer's content element as scroll container
     const contentEl = this.renderer.getContentElement()
@@ -439,18 +448,27 @@ export class EditorView {
   // =========================================================================
 
   updateOptions(opts: Partial<EditorViewOptions>): void {
+    let metricsChanged = false
     if (opts.readOnly !== undefined) {
       this.options.readOnly = opts.readOnly
       this.session.setReadOnly(opts.readOnly)
     }
     if (opts.tabSize !== undefined) {
       this.tabSize = opts.tabSize
-      this.session.updateMetrics(this.lineHeight, this.charWidth, this.tabSize)
+      this.options.tabSize = opts.tabSize
+      metricsChanged = true
+    }
+    if (opts.monospaceGrid !== undefined) {
+      this.options.monospaceGrid = opts.monospaceGrid
+      metricsChanged = true
     }
     if (opts.lineNumbers !== undefined) {
       this.options.lineNumbers = opts.lineNumbers
       const gutterWidth = opts.lineNumbers ? this.session.getGutterWidth() : 0
       this.renderer.updateGutterWidth(gutterWidth)
+    }
+    if (metricsChanged) {
+      this.updateSessionMetrics()
     }
     this.scheduleRender()
   }
@@ -514,11 +532,42 @@ export class EditorView {
   updateMetrics(): void {
     const metrics = measureFontMetrics(this.container, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE)
     this.charWidth = metrics.charWidth
+    this.cjkCharWidth = metrics.cjkCharWidth
     this.lineHeight = metrics.lineHeight
-    this.session.updateMetrics(this.lineHeight, this.charWidth, this.tabSize)
+    this.updateSessionMetrics()
     this.scrollManager.setLineHeight(this.lineHeight)
     this.updateTotalLines()
     this.scheduleRender()
+  }
+
+  private effectiveCjkCharWidth(): number {
+    return (this.options.monospaceGrid ?? false) ? this.charWidth * 2.0 : this.cjkCharWidth
+  }
+
+  private updateSessionMetrics(): void {
+    this.session.updateMetrics(
+      this.lineHeight,
+      this.charWidth,
+      this.effectiveCjkCharWidth(),
+      this.tabSize,
+    )
+    this.renderer?.updateMetrics(this.rendererMetrics())
+  }
+
+  private rendererMetrics(): RendererMetrics {
+    return {
+      lineHeight: this.lineHeight,
+      charWidth: this.charWidth,
+      cjkCharWidth: this.cjkCharWidth,
+      tabSize: this.tabSize,
+      monospaceGrid: this.options.monospaceGrid ?? false,
+    }
+  }
+
+  private createRenderer(options: RendererOptions): EditorRenderer {
+    return this.options.renderer === 'dom'
+      ? new DomRenderer(this.container, options)
+      : new WebGpuRenderer(this.container, options)
   }
 
   layout(): void {
@@ -939,18 +988,18 @@ export class EditorView {
     // Render caret and selection via the shared screen-space transform.
     if (caretRect) {
       const adjustedCaret = coords.docRectToScreenRect(caretRect)
-      this.inputHandler.setAnchorRect(adjustedCaret)
       if (this.compositionText.length > 0) {
         const compositionRight = this.renderer.renderComposition(this.compositionText, adjustedCaret)
-        this.renderer.renderCaret(
-          screenRect(
-            compositionRight,
-            adjustedCaret.y as number,
-            adjustedCaret.width as number,
-            adjustedCaret.height as number,
-          ),
+        const compositionCaret = screenRect(
+          compositionRight,
+          adjustedCaret.y as number,
+          adjustedCaret.width as number,
+          adjustedCaret.height as number,
         )
+        this.inputHandler.setAnchorRect(compositionCaret)
+        this.renderer.renderCaret(compositionCaret)
       } else {
+        this.inputHandler.setAnchorRect(adjustedCaret)
         this.renderer.clearComposition()
         this.renderer.renderCaret(adjustedCaret)
       }

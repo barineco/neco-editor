@@ -59,6 +59,7 @@ const session = new EditorSession(
   'rust',        // language
   20,            // lineHeight (px)
   8,             // charWidth (px)
+  14,            // cjkCharWidth (px)
   4,             // tabWidth
 )
 
@@ -81,8 +82,12 @@ session.free()
 | `session` | `EditorSession` |:| Inject an existing session instead of creating one |
 | `readOnly` | `boolean` | `false` | Disable editing |
 | `tabSize` | `number` | `4` | Tab stop width in spaces |
+| `monospaceGrid` | `boolean` | `false` | Use a strict 1:2 ASCII/CJK grid |
+| `renderer` | `'webgpu' \| 'dom'` | `'webgpu'` | Use the WebGPU renderer or the DOM renderer |
 | `lineNumbers` | `boolean` | `true` | Show line number gutter |
 | `padding` | `{ top?, bottom? }` |:| Content padding in pixels |
+
+`renderer: 'webgpu'` requires `navigator.gpu`, a WebGPU adapter, and a WebGPU canvas context. Unsupported environments fail with an explicit error instead of falling back to DOM rendering. Use `renderer: 'dom'` for comparison checks or browser environments without WebGPU.
 
 ## EditorView events
 
@@ -113,7 +118,7 @@ All event subscriptions return a `Disposable` with a `.dispose()` method.
 | `getSearchMatches()` | Return cached search results |
 | `isDirty()` / `markClean()` | Track save state |
 | `saveViewState()` / `restoreViewState(state)` | Persist scroll + cursor |
-| `updateOptions(opts)` | Update `readOnly`, `tabSize`, `lineNumbers` at runtime |
+| `updateOptions(opts)` | Update `readOnly`, `tabSize`, `monospaceGrid`, `lineNumbers` at runtime |
 | `focus()` / `hasFocus()` | Focus management |
 | `layout()` | Force layout recalculation after container resize |
 | `getSession()` | Access the underlying `EditorSession` |
@@ -159,6 +164,20 @@ Alternatively, set the upstream variables that the tokens fall back to:
 | `--syntax-comment` | `--neco-token-comment` |
 | `--syntax-accent` | `--neco-token-function`, `--neco-token-attribute` |
 | `--syntax-plain` | `--neco-token-plain`, `--neco-token-operator`, `--neco-token-punctuation`, `--neco-token-variable` |
+
+The package also reads Codigen-style theme KDL and applies the resulting CSS
+variables:
+
+```ts
+import { applyTheme, parseThemeKdl } from 'neco-editor'
+
+const theme = parseThemeKdl(themeKdlText)
+applyTheme(theme, editorContainer)
+```
+
+`parseThemeKdl` returns `{ id, name, vars }`. It reads `bg`, `fg`, `syntax`,
+`editor`, `terminal`, `override`, `var`, and `grad` nodes using the same variable
+names as Codigen themes.
 
 ## License
 

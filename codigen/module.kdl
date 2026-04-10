@@ -1,0 +1,9 @@
+module {
+  id "core.editor-neco"
+  name "Neco Editor"
+  version "0.1.0"
+  enabled #true
+  assets {
+    wasm "neco-editor-wasm/pkg/neco_editor_wasm_bg.wasm"
+  }
+}

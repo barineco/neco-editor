@@ -8,10 +8,12 @@
   --neco-editor-bg: var(--editor-bg, #1e1e1e);
   --neco-editor-fg: var(--editor-fg, #d4d4d4);
   --neco-gutter-bg: var(--editor-gutter, #1e1e1e);
-  --neco-gutter-fg: var(--editor-gutter-fg, #858585);
+  --neco-gutter-fg: var(--editor-gutter-fg, var(--editor-line-number, #858585));
+  --neco-gutter-active-fg: var(--editor-active-line-number, var(--neco-editor-fg));
   --neco-gutter-border: var(--editor-gutter-border, transparent);
   --neco-current-line-bg: var(--editor-selected-line, rgba(255, 255, 255, 0.04));
   --neco-selection-bg: var(--editor-selection, rgba(38, 79, 120, 0.5));
+  --neco-composition-bg: var(--editor-composition-bg, rgba(120, 160, 210, 0.18));
   --neco-cursor-color: var(--editor-cursor, #aeafad);
   --neco-token-keyword: var(--syntax-keyword, #569cd6);
   --neco-token-string: var(--syntax-string, #ce9178);
@@ -87,6 +89,10 @@
   /* transform: translateY is set inline by JS */
 }
 
+.neco-webgpu-canvas {
+  display: block;
+}
+
 /* --- Lines --- */
 .neco-line {
   position: relative;
@@ -105,6 +111,10 @@
   pointer-events: none;
   white-space: nowrap;
   box-sizing: border-box;
+}
+
+.neco-line-gutter-cell.neco-current-line {
+  color: var(--neco-gutter-active-fg);
 }
 
 /* --- Per-line content cell (text tokens) --- */
@@ -146,7 +156,7 @@
   position: absolute;
   display: none;
   padding: 0 1px;
-  background: rgba(120, 160, 210, 0.18);
+  background: var(--neco-composition-bg);
   color: var(--neco-editor-fg);
   text-decoration: underline;
   text-decoration-thickness: 1px;

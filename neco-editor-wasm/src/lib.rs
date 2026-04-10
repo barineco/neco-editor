@@ -203,6 +203,7 @@ impl EditorHandle {
         language: &str,
         line_height: f64,
         char_width: f64,
+        cjk_char_width: f64,
         tab_width: u32,
     ) -> EditorHandle {
         let buffer = EditorBuffer::new(text.to_string());
@@ -217,6 +218,7 @@ impl EditorHandle {
         let viewport_metrics = ViewportMetrics {
             line_height,
             char_width,
+            cjk_char_width,
             tab_width,
         };
 
@@ -390,10 +392,17 @@ impl EditorHandle {
     // -- Viewport -----------------------------------------------------------
 
     #[wasm_bindgen(js_name = updateMetrics)]
-    pub fn update_metrics(&mut self, line_height: f64, char_width: f64, tab_width: u32) {
+    pub fn update_metrics(
+        &mut self,
+        line_height: f64,
+        char_width: f64,
+        cjk_char_width: f64,
+        tab_width: u32,
+    ) {
         self.viewport_metrics = ViewportMetrics {
             line_height,
             char_width,
+            cjk_char_width,
             tab_width,
         };
         self.width_policy = WidthPolicy::cjk_grid(tab_width);
@@ -895,7 +904,7 @@ mod tests {
     use super::*;
 
     fn make_handle(text: &str) -> EditorHandle {
-        EditorHandle::new(text, "rust", 20.0, 8.0, 4)
+        EditorHandle::new(text, "rust", 20.0, 8.0, 14.0, 4)
     }
 
     fn auto_close_bracket_value(_handle: &EditorHandle, ch: u32) -> Option<u32> {
@@ -1093,13 +1102,26 @@ mod tests {
         let before = get_caret_rect_value(&h, "a\t".len() as u32).expect("rect before update");
         assert!((before.y - 20.0).abs() < f64::EPSILON);
 
-        h.update_metrics(20.0, 8.0, 1);
+        h.update_metrics(20.0, 8.0, 14.0, 1);
 
         let after = get_caret_rect_value(&h, "a\t".len() as u32).expect("rect after update");
         assert!(after.y.abs() < f64::EPSILON);
 
         let hit = hit_test_value(&h, after.x, after.y, 0.0);
         assert_eq!(hit, "a\t".len());
+    }
+
+    #[test]
+    fn update_metrics_changes_cjk_caret_width() {
+        let mut h = make_handle("aあ");
+
+        let before = get_caret_rect_value(&h, "aあ".len() as u32).expect("rect before update");
+        assert!((before.x - 22.0).abs() < f64::EPSILON);
+
+        h.update_metrics(20.0, 8.0, 16.0, 4);
+
+        let after = get_caret_rect_value(&h, "aあ".len() as u32).expect("rect after update");
+        assert!((after.x - 24.0).abs() < f64::EPSILON);
     }
 
     #[test]

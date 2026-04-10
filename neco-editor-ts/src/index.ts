@@ -1,6 +1,12 @@
 export { EditorSession } from './editor'
 export { EditorView } from './editor-view'
-export { tokenKindToClass } from './theme'
+export {
+  applyTheme,
+  collectThemeStyleEntries,
+  parseThemeKdl,
+  tokenKindToClass,
+} from './theme'
+export type { ThemeData, ThemeStyleSource } from './theme'
 export type {
   RenderLine,
   RangeChange,

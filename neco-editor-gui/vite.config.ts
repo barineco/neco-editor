@@ -3,6 +3,14 @@ import { resolve } from "path"
 
 export default defineConfig({
   clearScreen: false,
+  resolve: {
+    alias: {
+      "neco-editor-wasm": resolve(
+        __dirname,
+        "../neco-editor-wasm/pkg/neco_editor_wasm.js",
+      ),
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

@@ -18,7 +18,7 @@ The TypeScript package [`neco-editor-ts`](../neco-editor-ts) wraps `EditorHandle
 ### Construction
 
 ```js
-const handle = new EditorHandle(text, language, lineHeight, charWidth, tabWidth)
+const handle = new EditorHandle(text, language, lineHeight, charWidth, cjkCharWidth, tabWidth)
 ```
 
 | Parameter | Type | Description |
@@ -27,6 +27,7 @@ const handle = new EditorHandle(text, language, lineHeight, charWidth, tabWidth)
 | `language` | `string` | Language identifier for syntax highlighting (e.g. `"rust"`, `"typescript"`) |
 | `lineHeight` | `number` | Line height in pixels |
 | `charWidth` | `number` | Character width in pixels (monospace) |
+| `cjkCharWidth` | `number` | CJK character width in pixels |
 | `tabWidth` | `number` | Tab stop width in characters |
 
 ### Editing
@@ -70,7 +71,7 @@ const handle = new EditorHandle(text, language, lineHeight, charWidth, tabWidth)
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `updateMetrics(lineHeight, charWidth, tabWidth)` | `void` | Recalculate all geometry after a font or size change |
+| `updateMetrics(lineHeight, charWidth, cjkCharWidth, tabWidth)` | `void` | Recalculate all geometry after a font or size change |
 | `scrollToReveal(offset, scrollTop, containerHeight)` | `number \| null` | Return a new `scrollTop` that reveals `offset`, or `null` if already visible |
 
 ### Language features

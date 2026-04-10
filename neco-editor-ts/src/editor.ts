@@ -25,9 +25,10 @@ export class EditorSession {
     language: string,
     lineHeight: number,
     charWidth: number,
+    cjkCharWidth: number,
     tabWidth: number,
   ) {
-    this.handle = new EditorHandle(text, language, lineHeight, charWidth, tabWidth)
+    this.handle = new EditorHandle(text, language, lineHeight, charWidth, cjkCharWidth, tabWidth)
   }
 
   // -- Editing ---------------------------------------------------------------
@@ -120,8 +121,13 @@ export class EditorSession {
 
   // -- Viewport --------------------------------------------------------------
 
-  updateMetrics(lineHeight: number, charWidth: number, tabWidth: number): void {
-    this.handle.updateMetrics(lineHeight, charWidth, tabWidth)
+  updateMetrics(
+    lineHeight: number,
+    charWidth: number,
+    cjkCharWidth: number,
+    tabWidth: number,
+  ): void {
+    this.handle.updateMetrics(lineHeight, charWidth, cjkCharWidth, tabWidth)
   }
 
   getGutterWidth(): number {

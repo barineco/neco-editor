@@ -6,7 +6,7 @@ Viewport geometry calculations for editor rendering. Converts between byte offse
 
 ## How it works
 
-All functions are stateless and take `ViewportMetrics` (line height, character width, tab width) as input. `ViewportLayout` adds gutter and content-area offsets.
+All functions are stateless and take `ViewportMetrics` (line height, ASCII character width, CJK character width, tab width) as input. `ViewportLayout` adds gutter and content-area offsets.
 
 `visible_line_range` returns the first and last visual line numbers visible in a scrolled container. `caret_rect` computes the pixel rectangle for the cursor at a given byte offset. `selection_rects` returns one rectangle per visual line covered by a selection. `hit_test` goes the other direction: given a click at pixel `(x, y)`, it returns the byte offset in the text.
 
@@ -29,6 +29,7 @@ let wm = WrapMap::new(lines.iter().copied(), 80, &WrapPolicy::code());
 let metrics = ViewportMetrics {
     line_height: 20.0,
     char_width: 8.0,
+    cjk_char_width: 14.0,
     tab_width: 4,
 };
 
@@ -52,7 +53,7 @@ assert_eq!(offset, 0);
 
 | Item | Description |
 |------|-------------|
-| `ViewportMetrics` | Font metrics: line_height, char_width, tab_width |
+| `ViewportMetrics` | Font metrics: line_height, char_width, cjk_char_width, tab_width |
 | `ViewportLayout` | Computed layout: gutter_width, content_left |
 | `Rect` | Pixel rectangle with x, y, width, height |
 | `ViewportError` | Wraps `TextViewError` from line index operations |

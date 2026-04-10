@@ -46,9 +46,14 @@ export class CompositionTracker {
 
   handleEnd(text: string): void {
     if (!this.#active) return
+    const commitText = text.length > 0 ? text : this.#pending
     this.#active = false
     this.#pending = ''
-    this.#cb.onCommit(text)
+    if (commitText.length > 0) {
+      this.#cb.onCommit(commitText)
+      return
+    }
+    this.#cb.onCancel()
   }
 
   cancel(): void {

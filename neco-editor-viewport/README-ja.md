@@ -6,7 +6,7 @@
 
 ## 動作の概要
 
-すべての関数はステートレスで、`ViewportMetrics` (行高さ、文字幅、タブ幅) を入力に取ります。`ViewportLayout` はガターとコンテンツ領域のオフセットを加えた構造体です。
+すべての関数はステートレスで、`ViewportMetrics` (行高さ、ASCII 文字幅、CJK 文字幅、タブ幅) を入力に取ります。`ViewportLayout` はガターとコンテンツ領域のオフセットを加えた構造体です。
 
 `visible_line_range` はスクロール位置とコンテナ高さから描画対象の視覚行範囲を算出し、`caret_rect` は指定バイトオフセットのカーソル描画位置をピクセル矩形で返します。`selection_rects` は選択範囲がカバーする視覚行ごとに矩形を 1 つずつ生成する関数です。
 
@@ -31,6 +31,7 @@ let wm = WrapMap::new(lines.iter().copied(), 80, &WrapPolicy::code());
 let metrics = ViewportMetrics {
     line_height: 20.0,
     char_width: 8.0,
+    cjk_char_width: 14.0,
     tab_width: 4,
 };
 
@@ -54,7 +55,7 @@ assert_eq!(offset, 0);
 
 | 項目 | 説明 |
 |------|------|
-| `ViewportMetrics` | フォントメトリクス: line_height, char_width, tab_width |
+| `ViewportMetrics` | フォントメトリクス: line_height, char_width, cjk_char_width, tab_width |
 | `ViewportLayout` | 算出済みレイアウト: gutter_width, content_left |
 | `Rect` | ピクセル矩形: x, y, width, height |
 | `ViewportError` | LineIndex 操作由来の `TextViewError` を内包 |

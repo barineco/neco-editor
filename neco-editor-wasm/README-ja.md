@@ -18,7 +18,7 @@ TypeScript パッケージ [`neco-editor-ts`](../neco-editor-ts) が `EditorHand
 ### コンストラクタ
 
 ```js
-const handle = new EditorHandle(text, language, lineHeight, charWidth, tabWidth)
+const handle = new EditorHandle(text, language, lineHeight, charWidth, cjkCharWidth, tabWidth)
 ```
 
 | パラメータ | 型 | 説明 |
@@ -27,6 +27,7 @@ const handle = new EditorHandle(text, language, lineHeight, charWidth, tabWidth)
 | `language` | `string` | シンタックスハイライト用の言語識別子（例: `"rust"`, `"typescript"`） |
 | `lineHeight` | `number` | 行の高さ（ピクセル） |
 | `charWidth` | `number` | 文字幅（ピクセル、等幅前提） |
+| `cjkCharWidth` | `number` | CJK 文字幅（ピクセル） |
 | `tabWidth` | `number` | タブ幅（文字数） |
 
 ### 編集
@@ -70,7 +71,7 @@ const handle = new EditorHandle(text, language, lineHeight, charWidth, tabWidth)
 
 | メソッド | 戻り値 | 説明 |
 |--------|---------|------|
-| `updateMetrics(lineHeight, charWidth, tabWidth)` | `void` | フォントやサイズ変更後にジオメトリを再計算する |
+| `updateMetrics(lineHeight, charWidth, cjkCharWidth, tabWidth)` | `void` | フォントやサイズ変更後にジオメトリを再計算する |
 | `scrollToReveal(offset, scrollTop, containerHeight)` | `number \| null` | `offset` が表示されるよう新しい `scrollTop` を返す。すでに表示中なら `null` |
 
 ### 言語機能

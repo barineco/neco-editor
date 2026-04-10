@@ -65,7 +65,7 @@ export class InputHandler {
   private textarea: HTMLTextAreaElement
   private composing = false
   private justCommitted = false
-  private justCommittedRafId: number | null = null
+  private justCommittedTimerId: number | null = null
   private disposed = false
   private tracker: CompositionTracker
 
@@ -163,7 +163,7 @@ export class InputHandler {
       if (this.composing) return
 
       const ie = e as InputEvent
-      if (this.justCommitted && ie.inputType === 'insertFromComposition') {
+      if (this.justCommitted && this.shouldSuppressJustCommittedInput(ie)) {
         this.textarea.value = ''
         return
       }
@@ -336,21 +336,27 @@ export class InputHandler {
   private startJustCommittedWindow(): void {
     this.clearJustCommittedWindow()
     this.justCommitted = true
-    this.justCommittedRafId = requestAnimationFrame(() => {
+    this.justCommittedTimerId = window.setTimeout(() => {
       this.justCommitted = false
-      this.justCommittedRafId = null
-    })
+      this.justCommittedTimerId = null
+    }, 250)
   }
 
   private clearJustCommittedWindow(): void {
     this.justCommitted = false
-    if (this.justCommittedRafId !== null) {
-      cancelAnimationFrame(this.justCommittedRafId)
-      this.justCommittedRafId = null
+    if (this.justCommittedTimerId !== null) {
+      clearTimeout(this.justCommittedTimerId)
+      this.justCommittedTimerId = null
     }
   }
 
   private shouldSuppressJustCommittedKey(e: KeyboardEvent): boolean {
     return e.key === 'Enter'
+  }
+
+  private shouldSuppressJustCommittedInput(e: InputEvent): boolean {
+    return e.inputType === 'insertFromComposition' ||
+      e.inputType === 'insertLineBreak' ||
+      e.inputType === 'insertParagraph'
   }
 }

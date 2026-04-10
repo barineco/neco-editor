@@ -17,6 +17,7 @@ console.log(message)
 
 // Try:
 // - Edit this text
+// - Move through CJK: abc あいう 漢字 mixed
 // - Open a file with the toolbar button
 // - Save with Cmd+S (not implemented yet, use toolbar)
 // - Scroll with mouse wheel to test gutter sync
@@ -64,6 +65,8 @@ function createEditor(text: string, language: string): EditorView {
     text,
     language,
     lineNumbers: true,
+    renderer: rendererFromUrl(),
+    monospaceGrid: monospaceGridFromUrl(),
   }
 
   const view = new EditorView(options)
@@ -77,6 +80,15 @@ function createEditor(text: string, language: string): EditorView {
   })
 
   return view
+}
+
+function rendererFromUrl(): EditorViewOptions['renderer'] {
+  const renderer = new URLSearchParams(window.location.search).get('renderer')
+  return renderer === 'dom' ? 'dom' : 'webgpu'
+}
+
+function monospaceGridFromUrl(): boolean {
+  return new URLSearchParams(window.location.search).get('grid') === 'mono'
 }
 
 function updateCursorPos(view: EditorView, offset: number): void {

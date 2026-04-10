@@ -59,6 +59,7 @@ const session = new EditorSession(
   'rust',        // 言語
   20,            // lineHeight (px)
   8,             // charWidth (px)
+  14,            // cjkCharWidth (px)
   4,             // tabWidth
 )
 
@@ -81,8 +82,12 @@ session.free()
 | `session` | `EditorSession` |:| 既存セッションを注入する（`text`/`language` の代替） |
 | `readOnly` | `boolean` | `false` | 編集を無効にする |
 | `tabSize` | `number` | `4` | タブ幅（スペース数） |
+| `monospaceGrid` | `boolean` | `false` | ASCII/CJK を厳密な 1:2 グリッドで扱う |
+| `renderer` | `'webgpu' \| 'dom'` | `'webgpu'` | WebGPU renderer または DOM renderer を使う |
 | `lineNumbers` | `boolean` | `true` | 行番号ガターを表示する |
 | `padding` | `{ top?, bottom? }` |:| コンテンツのパディング（px） |
+
+`renderer: 'webgpu'` は `navigator.gpu`、WebGPU adapter、WebGPU canvas context を必要とします。非対応環境では DOM renderer にフォールバックせず、明示エラーにします。比較確認や WebGPU 非対応ブラウザでは `renderer: 'dom'` を指定してください。
 
 ## EditorView イベント
 
@@ -113,7 +118,7 @@ view.onDidBlur(() => { })
 | `getSearchMatches()` | キャッシュ済みの検索結果を返す |
 | `isDirty()` / `markClean()` | 保存状態を管理する |
 | `saveViewState()` / `restoreViewState(state)` | スクロール位置とカーソルを保存/復元する |
-| `updateOptions(opts)` | `readOnly`・`tabSize`・`lineNumbers` を実行時に変更する |
+| `updateOptions(opts)` | `readOnly`・`tabSize`・`monospaceGrid`・`lineNumbers` を実行時に変更する |
 | `focus()` / `hasFocus()` | フォーカス管理 |
 | `layout()` | コンテナリサイズ後にレイアウトを強制再計算する |
 | `getSession()` | 内部の `EditorSession` にアクセスする |
@@ -159,6 +164,20 @@ view.onDidBlur(() => { })
 | `--syntax-comment` | `--neco-token-comment` |
 | `--syntax-accent` | `--neco-token-function`、`--neco-token-attribute` |
 | `--syntax-plain` | `--neco-token-plain`、`--neco-token-operator`、`--neco-token-punctuation`、`--neco-token-variable` |
+
+Codigen 形式のテーマ KDL も読み込めます。読み込んだ CSS 変数はそのまま
+エディタに適用できます。
+
+```ts
+import { applyTheme, parseThemeKdl } from 'neco-editor'
+
+const theme = parseThemeKdl(themeKdlText)
+applyTheme(theme, editorContainer)
+```
+
+`parseThemeKdl` は `{ id, name, vars }` を返します。`bg`、`fg`、`syntax`、
+`editor`、`terminal`、`override`、`var`、`grad` ノードを読み、Codigen の
+テーマと同じ変数名を使います。
 
 ## ライセンス
 

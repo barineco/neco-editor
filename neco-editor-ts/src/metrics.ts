@@ -23,6 +23,18 @@ export function measureCharWidth(
   return metrics.width / sample.length
 }
 
+/** Measure the rendered advance of CJK full-width glyphs for the active font stack. */
+export function measureCjkCharWidth(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  fontFamily: string,
+  fontSize: number,
+): number {
+  ctx.font = `${fontSize}px ${fontFamily}`
+  const sample = 'ああああああああああ'
+  const metrics = ctx.measureText(sample)
+  return metrics.width / sample.length
+}
+
 /**
  * Compute line height from a container element's computed style.
  *
@@ -87,6 +99,7 @@ export function measureFontMetrics(
 ): FontMetrics {
   const ctx = createMeasureContext()
   const charWidth = measureCharWidth(ctx, fontFamily, fontSize)
+  const cjkCharWidth = measureCjkCharWidth(ctx, fontFamily, fontSize)
   const lineHeight = resolveLineHeight(container, fontSize)
-  return { charWidth, lineHeight }
+  return { charWidth, cjkCharWidth, lineHeight }
 }
