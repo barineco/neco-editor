@@ -48,6 +48,7 @@ pub struct HistoryEntry {
     inverse_patches: Option<Vec<TextPatch>>,
     snapshot: Option<String>,
     checkpoint: Option<String>,
+    group_id: Option<u64>,
 }
 
 impl HistoryEntry {
@@ -129,6 +130,8 @@ pub struct EditHistory {
     tree: CursoredTree<HistoryEntry>,
     checkpoint_interval: u32,
     edits_since_checkpoint: u32,
+    active_group_id: Option<u64>,
+    group_counter: u64,
 }
 
 impl EditHistory {
@@ -141,11 +144,14 @@ impl EditHistory {
             inverse_patches: None,
             snapshot: Some(initial_text.to_string()),
             checkpoint: Some(initial_text.to_string()),
+            group_id: None,
         };
         Self {
             tree: CursoredTree::new(root_entry),
             checkpoint_interval: 20,
             edits_since_checkpoint: 0,
+            active_group_id: None,
+            group_counter: 0,
         }
     }
 
@@ -167,6 +173,7 @@ impl EditHistory {
             inverse_patches: Some(inverse),
             snapshot: None,
             checkpoint,
+            group_id: self.active_group_id,
         };
         self.tree.push(entry)
     }
@@ -186,45 +193,71 @@ impl EditHistory {
             inverse_patches: None,
             snapshot: Some(full_text.clone()),
             checkpoint: Some(full_text),
+            group_id: self.active_group_id,
         };
         self.tree.push(entry)
+    }
+
+    /// Begin a group of edits that undo and redo together.
+    ///
+    /// Nested calls are no-ops; the existing group continues.
+    pub fn begin_group(&mut self, _label: &str) {
+        if self.active_group_id.is_none() {
+            self.group_counter += 1;
+            self.active_group_id = Some(self.group_counter);
+        }
+    }
+
+    /// End the current edit group. Has no effect when no group is active.
+    pub fn end_group(&mut self) {
+        self.active_group_id = None;
     }
 
     /// Undo: return the information needed to reverse the current edit, then
     /// move the cursor to the parent.
     ///
     /// Returns `None` when at the root (nothing to undo).
-    pub fn undo(&mut self) -> Option<UndoResult> {
-        if !self.tree.has_parent() {
-            return None;
+    pub fn undo(&mut self) -> Option<Vec<UndoResult>> {
+        let mut results = Vec::new();
+        let (first_group_id, first_result) = self.undo_one()?;
+        results.push(first_result);
+
+        if let Some(group_id) = first_group_id {
+            while self.tree.has_parent() {
+                let entry = self.tree.current().value();
+                if entry.group_id != Some(group_id) {
+                    break;
+                }
+                let (_, result) = self.undo_one()?;
+                results.push(result);
+            }
         }
-        let entry = self.tree.current().value();
-        let result = UndoResult {
-            kind: entry.kind(),
-            inverse_patches: entry.inverse_patches.clone(),
-            snapshot: self.find_parent_snapshot(),
-            label: entry.label.clone(),
-        };
-        self.tree.go_parent();
-        Some(result)
+
+        Some(results)
     }
 
     /// Redo: move the cursor to the last (newest) child and return the
     /// information needed to replay that edit.
     ///
     /// Returns `None` when there are no children.
-    pub fn redo(&mut self) -> Option<RedoResult> {
-        if !self.tree.has_children() {
-            return None;
+    pub fn redo(&mut self) -> Option<Vec<RedoResult>> {
+        let mut results = Vec::new();
+        let (first_group_id, first_result) = self.redo_one()?;
+        results.push(first_result);
+
+        if let Some(group_id) = first_group_id {
+            while self.tree.has_children() {
+                let next_index = self.tree.current().child_count() - 1;
+                let next_entry = self.tree.current().children()[next_index].value();
+                if next_entry.group_id != Some(group_id) {
+                    break;
+                }
+                let (_, result) = self.redo_one()?;
+                results.push(result);
+            }
         }
-        self.tree.go_child_last();
-        let entry = self.tree.current().value();
-        Some(RedoResult {
-            kind: entry.kind(),
-            forward_patches: entry.forward_patches.clone(),
-            snapshot: entry.snapshot.clone(),
-            label: entry.label.clone(),
-        })
+
+        Some(results)
     }
 
     /// Jump to an arbitrary node, returning the sequence of undo/redo steps
@@ -249,7 +282,7 @@ impl EditHistory {
         // Undo from current up to LCA.
         let undo_count = current_path.len() - lca_depth;
         for _ in 0..undo_count {
-            if let Some(result) = self.undo() {
+            if let Some((_, result)) = self.undo_one() {
                 steps.push(JumpStep::Undo(result));
             }
         }
@@ -257,17 +290,9 @@ impl EditHistory {
         // Redo from LCA down to target.
         let redo_indices = &target_path[lca_depth..];
         for &child_index in redo_indices {
-            if !self.tree.has_children() {
-                break;
+            if let Some((_, result)) = self.redo_child(child_index) {
+                steps.push(JumpStep::Redo(result));
             }
-            self.tree.go_child(child_index);
-            let entry = self.tree.current().value();
-            steps.push(JumpStep::Redo(RedoResult {
-                kind: entry.kind(),
-                forward_patches: entry.forward_patches.clone(),
-                snapshot: entry.snapshot.clone(),
-                label: entry.label.clone(),
-            }));
         }
 
         Some(steps)
@@ -329,6 +354,46 @@ impl EditHistory {
         } else {
             None
         }
+    }
+
+    fn undo_one(&mut self) -> Option<(Option<u64>, UndoResult)> {
+        if !self.tree.has_parent() {
+            return None;
+        }
+        let entry = self.tree.current().value();
+        let group_id = entry.group_id;
+        let result = UndoResult {
+            kind: entry.kind(),
+            inverse_patches: entry.inverse_patches.clone(),
+            snapshot: self.find_parent_snapshot(),
+            label: entry.label.clone(),
+        };
+        self.tree.go_parent();
+        Some((group_id, result))
+    }
+
+    fn redo_one(&mut self) -> Option<(Option<u64>, RedoResult)> {
+        if !self.tree.has_children() {
+            return None;
+        }
+        let child_index = self.tree.current().child_count() - 1;
+        self.redo_child(child_index)
+    }
+
+    fn redo_child(&mut self, child_index: usize) -> Option<(Option<u64>, RedoResult)> {
+        if !self.tree.go_child(child_index) {
+            return None;
+        }
+        let entry = self.tree.current().value();
+        Some((
+            entry.group_id,
+            RedoResult {
+                kind: entry.kind(),
+                forward_patches: entry.forward_patches.clone(),
+                snapshot: entry.snapshot.clone(),
+                label: entry.label.clone(),
+            },
+        ))
     }
 
     fn find_parent_snapshot(&self) -> Option<String> {
@@ -464,7 +529,7 @@ mod tests {
         h.push_edit("insert", "abc", make_insert(3, "d"));
 
         assert!(h.can_undo());
-        let result = h.undo().unwrap();
+        let result = h.undo().unwrap().remove(0);
         assert_eq!(result.kind, EntryKind::Reversible);
         assert_eq!(result.label, "insert");
         assert!(result.inverse_patches.is_some());
@@ -485,7 +550,7 @@ mod tests {
         h.undo();
 
         assert!(h.can_redo());
-        let result = h.redo().unwrap();
+        let result = h.redo().unwrap().remove(0);
         assert_eq!(result.kind, EntryKind::Reversible);
         assert_eq!(result.label, "insert");
         assert!(result.forward_patches.is_some());
@@ -497,6 +562,23 @@ mod tests {
         let mut h = EditHistory::new("text");
         h.push_edit("edit", "text", make_insert(4, "!"));
         assert!(h.redo().is_none());
+    }
+
+    #[test]
+    fn grouped_edits_undo_and_redo_together() {
+        let mut h = EditHistory::new("abc");
+        h.begin_group("group");
+        h.push_edit("first", "abc", make_insert(3, "d"));
+        h.push_edit("second", "abcd", make_insert(4, "e"));
+        h.end_group();
+
+        let undo = h.undo().unwrap();
+        assert_eq!(undo.len(), 2);
+        assert_eq!(h.current_id(), 0);
+
+        let redo = h.redo().unwrap();
+        assert_eq!(redo.len(), 2);
+        assert_eq!(h.current_id(), 2);
     }
 
     // -- branching ----------------------------------------------------------
@@ -571,6 +653,22 @@ mod tests {
         assert_eq!(h.current_id(), snap_id);
     }
 
+    #[test]
+    fn jump_to_inside_group_is_node_precise() {
+        let mut h = EditHistory::new("abc");
+        h.begin_group("group");
+        let first = h.push_edit("first", "abc", make_insert(3, "d"));
+        let second = h.push_edit("second", "abcd", make_insert(4, "e"));
+        h.end_group();
+
+        assert_eq!(h.current_id(), second);
+
+        let steps = h.jump_to(first).unwrap();
+        assert_eq!(steps.len(), 1);
+        assert!(matches!(steps[0], JumpStep::Undo(_)));
+        assert_eq!(h.current_id(), first);
+    }
+
     // -- checkpoint ---------------------------------------------------------
 
     #[test]
@@ -643,7 +741,7 @@ mod tests {
         let mut h = EditHistory::new("original");
         h.push_snapshot("reload", "reloaded".to_string());
 
-        let result = h.undo().unwrap();
+        let result = h.undo().unwrap().remove(0);
         assert_eq!(result.kind, EntryKind::Snapshot);
         assert_eq!(result.snapshot.as_deref(), Some("original"));
     }
@@ -668,22 +766,22 @@ mod tests {
         assert_eq!(text, "hello rust");
 
         // Undo edit 2
-        let u2 = h.undo().unwrap();
+        let u2 = h.undo().unwrap().remove(0);
         text = apply_patches(&text, u2.inverse_patches.as_ref().unwrap()).unwrap();
         assert_eq!(text, "hello world");
 
         // Undo edit 1
-        let u1 = h.undo().unwrap();
+        let u1 = h.undo().unwrap().remove(0);
         text = apply_patches(&text, u1.inverse_patches.as_ref().unwrap()).unwrap();
         assert_eq!(text, "hello");
 
         // Redo edit 1
-        let r1 = h.redo().unwrap();
+        let r1 = h.redo().unwrap().remove(0);
         text = apply_patches(&text, r1.forward_patches.as_ref().unwrap()).unwrap();
         assert_eq!(text, "hello world");
 
         // Redo edit 2
-        let r2 = h.redo().unwrap();
+        let r2 = h.redo().unwrap().remove(0);
         text = apply_patches(&text, r2.forward_patches.as_ref().unwrap()).unwrap();
         assert_eq!(text, "hello rust");
     }
@@ -699,7 +797,7 @@ mod tests {
         let modified = apply_patches("abcdef", &fwd).unwrap();
         assert_eq!(modified, "abef");
 
-        let u = h.undo().unwrap();
+        let u = h.undo().unwrap().remove(0);
         let restored = apply_patches(&modified, u.inverse_patches.as_ref().unwrap()).unwrap();
         assert_eq!(restored, "abcdef");
     }

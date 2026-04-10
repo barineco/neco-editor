@@ -135,6 +135,34 @@ fn search_match_to_js_value(m: &SearchMatch) -> JsValue {
     object.into()
 }
 
+fn decoration_kind_str(kind: neco_editor::neco_decor::DecorationKind) -> &'static str {
+    match kind {
+        neco_editor::neco_decor::DecorationKind::Highlight => "highlight",
+        neco_editor::neco_decor::DecorationKind::Marker => "marker",
+        neco_editor::neco_decor::DecorationKind::Widget { .. } => "widget",
+    }
+}
+
+fn decoration_to_js(
+    id: neco_editor::neco_decor::DecorationId,
+    deco: &neco_editor::neco_decor::Decoration,
+) -> JsValue {
+    let object = Object::new();
+    set_prop(&object, "id", JsValue::from_str(&id.into_raw().to_string()));
+    set_prop(&object, "start", JsValue::from_f64(deco.start() as f64));
+    set_prop(&object, "end", JsValue::from_f64(deco.end() as f64));
+    set_prop(&object, "tag", JsValue::from_f64(f64::from(deco.tag())));
+    set_prop(
+        &object,
+        "kind",
+        JsValue::from_str(decoration_kind_str(deco.kind())),
+    );
+    if let neco_editor::neco_decor::DecorationKind::Widget { block } = deco.kind() {
+        set_prop(&object, "block", JsValue::from_bool(block));
+    }
+    object.into()
+}
+
 fn range_change_to_js_value(rc: &RangeChange) -> JsValue {
     let object = Object::new();
     set_prop(&object, "start", JsValue::from_f64(rc.start() as f64));
@@ -167,6 +195,14 @@ fn map_search_error(e: SearchError) -> WasmErrorData {
     WasmErrorData {
         domain: "search",
         code: "search_error",
+        message: e.to_string(),
+    }
+}
+
+fn map_decor_error(e: neco_editor::neco_decor::DecorError) -> WasmErrorData {
+    WasmErrorData {
+        domain: "decoration",
+        code: "decor_error",
         message: e.to_string(),
     }
 }
@@ -389,6 +425,125 @@ impl EditorHandle {
         arr.into()
     }
 
+    #[wasm_bindgen(js_name = findPrevious)]
+    pub fn find_previous(
+        &self,
+        pattern: &str,
+        from_offset: u32,
+        is_regex: bool,
+        case_sensitive: bool,
+        whole_word: bool,
+    ) -> Result<JsValue, JsValue> {
+        match find_previous_value(
+            self,
+            pattern,
+            from_offset,
+            is_regex,
+            case_sensitive,
+            whole_word,
+        )
+        .map_err(error_to_js_value)?
+        {
+            Some(m) => Ok(search_match_to_js_value(&m)),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    #[wasm_bindgen(js_name = replaceAll)]
+    pub fn replace_all(
+        &mut self,
+        pattern: &str,
+        replacement: &str,
+        is_regex: bool,
+        case_sensitive: bool,
+        whole_word: bool,
+    ) -> Result<u32, JsValue> {
+        replace_all_value(
+            self,
+            pattern,
+            replacement,
+            is_regex,
+            case_sensitive,
+            whole_word,
+        )
+        .map_err(error_to_js_value)
+    }
+
+    #[wasm_bindgen(js_name = replaceNext)]
+    pub fn replace_next(
+        &mut self,
+        pattern: &str,
+        replacement: &str,
+        from_offset: u32,
+        is_regex: bool,
+        case_sensitive: bool,
+        whole_word: bool,
+    ) -> Result<JsValue, JsValue> {
+        match replace_next_value(
+            self,
+            pattern,
+            replacement,
+            from_offset,
+            is_regex,
+            case_sensitive,
+            whole_word,
+        )
+        .map_err(error_to_js_value)?
+        {
+            Some(m) => Ok(search_match_to_js_value(&m)),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    // -- Decorations --------------------------------------------------------
+
+    #[wasm_bindgen(js_name = addDecoration)]
+    pub fn add_decoration(
+        &mut self,
+        start: u32,
+        end: u32,
+        tag: u32,
+        kind: &str,
+    ) -> Result<String, JsValue> {
+        add_decoration_value(self, start, end, tag, kind).map_err(error_to_js_value)
+    }
+
+    #[wasm_bindgen(js_name = removeDecoration)]
+    pub fn remove_decoration(&mut self, raw_id: &str) -> Result<bool, JsValue> {
+        let raw = raw_id.parse::<u64>().map_err(|e| {
+            error_to_js_value(WasmErrorData {
+                domain: "decoration",
+                code: "invalid_decoration_id",
+                message: e.to_string(),
+            })
+        })?;
+        Ok(self
+            .decorations
+            .remove(neco_editor::neco_decor::DecorationId::from_raw(raw)))
+    }
+
+    #[wasm_bindgen(js_name = clearDecorationsByTag)]
+    pub fn clear_decorations_by_tag(&mut self, tag: u32) {
+        let ids: Vec<_> = self
+            .decorations
+            .query_tag(tag)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        for id in ids {
+            self.decorations.remove(id);
+        }
+    }
+
+    #[wasm_bindgen(js_name = queryDecorations)]
+    pub fn query_decorations(&self, start: u32, end: u32) -> JsValue {
+        let arr = Array::new();
+        for (id, deco) in self.decorations.query_range(start as usize, end as usize) {
+            arr.push(&decoration_to_js(id, deco));
+        }
+        arr.into()
+    }
+
     // -- Viewport -----------------------------------------------------------
 
     #[wasm_bindgen(js_name = updateMetrics)]
@@ -527,6 +682,29 @@ fn apply_edit_value(
     new_text: &str,
     label: &str,
 ) -> Result<Vec<RangeChange>, WasmErrorData> {
+    let patch = text_patch_from_range(start as usize, end as usize, new_text)?;
+    apply_patches_value(handle, vec![patch], label)
+}
+
+fn text_patch_from_range(
+    start: usize,
+    end: usize,
+    new_text: &str,
+) -> Result<TextPatch, WasmErrorData> {
+    if start == end && !new_text.is_empty() {
+        Ok(TextPatch::insert(start, new_text))
+    } else if new_text.is_empty() {
+        TextPatch::delete(start, end).map_err(map_textpatch_error)
+    } else {
+        TextPatch::replace(start, end, new_text).map_err(map_textpatch_error)
+    }
+}
+
+fn apply_patches_value(
+    handle: &mut EditorHandle,
+    patches: Vec<TextPatch>,
+    label: &str,
+) -> Result<Vec<RangeChange>, WasmErrorData> {
     if handle.read_only {
         return Err(WasmErrorData {
             domain: "editor",
@@ -534,15 +712,6 @@ fn apply_edit_value(
             message: "buffer is read-only".to_string(),
         });
     }
-
-    let patch = if start == end && !new_text.is_empty() {
-        TextPatch::insert(start as usize, new_text)
-    } else if new_text.is_empty() {
-        TextPatch::delete(start as usize, end as usize).map_err(map_textpatch_error)?
-    } else {
-        TextPatch::replace(start as usize, end as usize, new_text).map_err(map_textpatch_error)?
-    };
-    let patches = vec![patch];
 
     // Validate patches against text before applying. This prevents panics in
     // inverse_patches (called by history.push_edit) when offsets are out of bounds.
@@ -577,35 +746,56 @@ fn apply_edit_value(
     Ok(range_changes)
 }
 
+fn apply_history_patches_value(
+    handle: &mut EditorHandle,
+    patches: &[TextPatch],
+) -> Result<(), WasmErrorData> {
+    handle
+        .buffer
+        .apply_patches_with(
+            patches,
+            &mut handle.decorations,
+            Some(&mut handle.wrap_map),
+            Some(&handle.wrap_policy),
+            None,
+            None,
+        )
+        .map_err(map_textpatch_error)
+}
+
+fn restore_snapshot_value(handle: &mut EditorHandle, snapshot: &str) -> Result<(), WasmErrorData> {
+    if handle.buffer.text() == snapshot {
+        return Ok(());
+    }
+    if handle.buffer.text().is_empty() && snapshot.is_empty() {
+        return Ok(());
+    }
+    let patch = text_patch_from_range(0, handle.buffer.text().len(), snapshot)?;
+    apply_history_patches_value(handle, &[patch])
+}
+
 /// Result of undo/redo: None if nothing to undo/redo, Some(label) otherwise.
 fn undo_value(handle: &mut EditorHandle) -> Result<Option<String>, WasmErrorData> {
-    let undo_result = match handle.history.undo() {
+    let undo_results = match handle.history.undo() {
         Some(r) => r,
         None => return Ok(None),
     };
 
-    match undo_result.kind {
-        neco_editor::neco_history::EntryKind::Reversible => {
-            if let Some(inverse) = &undo_result.inverse_patches {
-                handle
-                    .buffer
-                    .apply_patches(inverse)
-                    .map_err(map_textpatch_error)?;
-                handle.wrap_map = WrapMap::new(
-                    handle.buffer.text().split('\n'),
-                    handle.wrap_map.max_width(),
-                    &handle.wrap_policy,
-                );
+    let label = undo_results
+        .first()
+        .map(|result| result.label.clone())
+        .unwrap_or_default();
+    for undo_result in &undo_results {
+        match undo_result.kind {
+            neco_editor::neco_history::EntryKind::Reversible => {
+                if let Some(inverse) = &undo_result.inverse_patches {
+                    apply_history_patches_value(handle, inverse)?;
+                }
             }
-        }
-        neco_editor::neco_history::EntryKind::Snapshot => {
-            if let Some(snapshot) = &undo_result.snapshot {
-                handle.buffer = EditorBuffer::new(snapshot.clone());
-                handle.wrap_map = WrapMap::new(
-                    handle.buffer.text().split('\n'),
-                    handle.wrap_map.max_width(),
-                    &handle.wrap_policy,
-                );
+            neco_editor::neco_history::EntryKind::Snapshot => {
+                if let Some(snapshot) = &undo_result.snapshot {
+                    restore_snapshot_value(handle, snapshot)?;
+                }
             }
         }
     }
@@ -613,38 +803,29 @@ fn undo_value(handle: &mut EditorHandle) -> Result<Option<String>, WasmErrorData
     handle.edit_count += 1;
     handle.highlight_valid_through = 0;
 
-    Ok(Some(undo_result.label))
+    Ok(Some(label))
 }
 
 /// Result of redo: None if nothing to redo, Some(label) otherwise.
 fn redo_value(handle: &mut EditorHandle) -> Result<Option<String>, WasmErrorData> {
-    let redo_result = match handle.history.redo() {
+    let redo_results = match handle.history.redo() {
         Some(r) => r,
         None => return Ok(None),
     };
 
-    match redo_result.kind {
-        neco_editor::neco_history::EntryKind::Reversible => {
-            if let Some(forward) = &redo_result.forward_patches {
-                handle
-                    .buffer
-                    .apply_patches(forward)
-                    .map_err(map_textpatch_error)?;
-                handle.wrap_map = WrapMap::new(
-                    handle.buffer.text().split('\n'),
-                    handle.wrap_map.max_width(),
-                    &handle.wrap_policy,
-                );
+    let mut last_label = String::new();
+    for redo_result in &redo_results {
+        last_label = redo_result.label.clone();
+        match redo_result.kind {
+            neco_editor::neco_history::EntryKind::Reversible => {
+                if let Some(forward) = &redo_result.forward_patches {
+                    apply_history_patches_value(handle, forward)?;
+                }
             }
-        }
-        neco_editor::neco_history::EntryKind::Snapshot => {
-            if let Some(snapshot) = &redo_result.snapshot {
-                handle.buffer = EditorBuffer::new(snapshot.clone());
-                handle.wrap_map = WrapMap::new(
-                    handle.buffer.text().split('\n'),
-                    handle.wrap_map.max_width(),
-                    &handle.wrap_policy,
-                );
+            neco_editor::neco_history::EntryKind::Snapshot => {
+                if let Some(snapshot) = &redo_result.snapshot {
+                    restore_snapshot_value(handle, snapshot)?;
+                }
             }
         }
     }
@@ -652,7 +833,7 @@ fn redo_value(handle: &mut EditorHandle) -> Result<Option<String>, WasmErrorData
     handle.edit_count += 1;
     handle.highlight_valid_through = 0;
 
-    Ok(Some(redo_result.label))
+    Ok(Some(last_label))
 }
 
 fn undo_redo_result_to_js(label: Option<String>) -> JsValue {
@@ -877,6 +1058,140 @@ fn search_value(
     Ok(())
 }
 
+fn find_previous_value(
+    handle: &EditorHandle,
+    pattern: &str,
+    from_offset: u32,
+    is_regex: bool,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> Result<Option<SearchMatch>, WasmErrorData> {
+    let query = SearchQuery {
+        pattern: pattern.to_string(),
+        is_regex,
+        case_sensitive,
+        whole_word,
+    };
+    neco_editor_search::find_previous(
+        handle.buffer.text(),
+        handle.buffer.line_index(),
+        &query,
+        from_offset as usize,
+    )
+    .map_err(map_search_error)
+}
+
+fn replace_all_value(
+    handle: &mut EditorHandle,
+    pattern: &str,
+    replacement: &str,
+    is_regex: bool,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> Result<u32, WasmErrorData> {
+    let query = SearchQuery {
+        pattern: pattern.to_string(),
+        is_regex,
+        case_sensitive,
+        whole_word,
+    };
+    let replacements =
+        neco_editor_search::replace_all_ranges(handle.buffer.text(), &query, replacement)
+            .map_err(map_search_error)?;
+    if replacements.is_empty() {
+        return Ok(0);
+    }
+
+    let count = replacements.len();
+    let mut patches = Vec::new();
+    for (range, replacement_text) in replacements {
+        if range.start() == range.end() && replacement_text.is_empty() {
+            continue;
+        }
+        patches.push(text_patch_from_range(
+            range.start(),
+            range.end(),
+            &replacement_text,
+        )?);
+    }
+    if patches.is_empty() {
+        return Ok(count as u32);
+    }
+
+    apply_patches_value(handle, patches, "replace all")?;
+    Ok(count as u32)
+}
+
+fn replace_next_value(
+    handle: &mut EditorHandle,
+    pattern: &str,
+    replacement: &str,
+    from_offset: u32,
+    is_regex: bool,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> Result<Option<SearchMatch>, WasmErrorData> {
+    let query = SearchQuery {
+        pattern: pattern.to_string(),
+        is_regex,
+        case_sensitive,
+        whole_word,
+    };
+    let text = handle.buffer.text().to_string();
+    match neco_editor_search::replace_next(
+        &text,
+        handle.buffer.line_index(),
+        &query,
+        replacement,
+        from_offset as usize,
+    )
+    .map_err(map_search_error)?
+    {
+        Some((new_text, original_match)) => {
+            let replacement_start = original_match.range().start();
+            let suffix_len = text.len() - original_match.range().end();
+            let replacement_end = new_text.len() - suffix_len;
+            let replacement_text = &new_text[replacement_start..replacement_end];
+            let patch = text_patch_from_range(
+                original_match.range().start(),
+                original_match.range().end(),
+                replacement_text,
+            )?;
+            apply_patches_value(handle, vec![patch], "replace next")?;
+            Ok(Some(original_match))
+        }
+        None => Ok(None),
+    }
+}
+
+fn add_decoration_value(
+    handle: &mut EditorHandle,
+    start: u32,
+    end: u32,
+    tag: u32,
+    kind: &str,
+) -> Result<String, WasmErrorData> {
+    let deco = match kind {
+        "highlight" => {
+            neco_editor::neco_decor::Decoration::highlight(start as usize, end as usize, tag)
+                .map_err(map_decor_error)?
+        }
+        "marker" => neco_editor::neco_decor::Decoration::marker(start as usize, tag),
+        "widget" => {
+            neco_editor::neco_decor::Decoration::widget(start as usize, end as usize, tag, false)
+                .map_err(map_decor_error)?
+        }
+        _ => {
+            return Err(WasmErrorData {
+                domain: "decoration",
+                code: "invalid_decoration_kind",
+                message: kind.to_string(),
+            });
+        }
+    };
+    Ok(handle.decorations.add(deco).into_raw().to_string())
+}
+
 fn scroll_to_reveal_value(
     handle: &EditorHandle,
     offset: u32,
@@ -1034,6 +1349,138 @@ mod tests {
         let mut h = make_handle("abc abc");
         search_value(&mut h, "abc", false, true, false).expect("should succeed");
         assert_eq!(h.search_matches.len(), 2);
+    }
+
+    #[test]
+    fn find_previous_finds_match_before_offset() {
+        let h = make_handle("abc abc abc");
+
+        let m = find_previous_value(&h, "abc", 7, false, true, false)
+            .expect("find previous should succeed");
+
+        assert!(m.is_some());
+    }
+
+    #[test]
+    fn replace_all_updates_text_once() {
+        let mut h = make_handle("abc abc");
+
+        let count = h
+            .replace_all("abc", "xyz", false, true, false)
+            .expect("replace all should succeed");
+
+        assert_eq!(count, 2);
+        assert_eq!(h.get_text(), "xyz xyz");
+        assert!(undo_value(&mut h).unwrap().is_some());
+        assert_eq!(h.get_text(), "abc abc");
+    }
+
+    #[test]
+    fn replace_all_preserves_decoration_between_matches() {
+        let mut h = make_handle("abc keep abc");
+        let deco_id = h
+            .add_decoration(4, 8, 7, "highlight")
+            .expect("decoration should be added");
+
+        let count = h
+            .replace_all("abc", "xyz", false, true, false)
+            .expect("replace all should succeed");
+
+        assert_eq!(count, 2);
+        assert_eq!(h.get_text(), "xyz keep xyz");
+        assert!(h.remove_decoration(&deco_id).unwrap());
+    }
+
+    #[test]
+    fn replace_next_value_updates_only_next_match() {
+        let mut h = make_handle("abc abc");
+
+        let m = replace_next_value(&mut h, "abc", "xyz", 1, false, true, false)
+            .expect("replace next should succeed")
+            .expect("match should exist");
+
+        assert_eq!(m.range().start(), 4);
+        assert_eq!(h.get_text(), "abc xyz");
+    }
+
+    #[test]
+    fn replace_next_preserves_decoration_before_match() {
+        let mut h = make_handle("abc keep abc");
+        let deco_id = h
+            .add_decoration(4, 8, 7, "highlight")
+            .expect("decoration should be added");
+
+        let m = replace_next_value(&mut h, "abc", "xyz", 5, false, true, false)
+            .expect("replace next should succeed")
+            .expect("match should exist");
+
+        assert_eq!(m.range().start(), 9);
+        assert_eq!(h.get_text(), "abc keep xyz");
+        assert!(h.remove_decoration(&deco_id).unwrap());
+    }
+
+    #[test]
+    fn decoration_binding_add_remove_and_clear_by_string_id() {
+        let mut h = make_handle("hello");
+
+        let id = h
+            .add_decoration(0, 5, 7, "highlight")
+            .expect("add decoration should succeed");
+
+        assert_eq!(h.decorations.len(), 1);
+        assert!(h.remove_decoration(&id).expect("remove should parse id"));
+        assert!(h.decorations.is_empty());
+
+        h.add_decoration(0, 5, 7, "highlight")
+            .expect("add decoration should succeed");
+        h.clear_decorations_by_tag(7);
+        assert!(h.decorations.is_empty());
+    }
+
+    #[test]
+    fn decoration_binding_rejects_unknown_kind() {
+        let mut h = make_handle("hello");
+
+        let err = add_decoration_value(&mut h, 0, 5, 7, "unknown").unwrap_err();
+
+        assert_eq!(err.code, "invalid_decoration_kind");
+    }
+
+    #[test]
+    fn grouped_undo_redo_returns_stable_label() {
+        let mut h = make_handle("abc");
+        h.history.begin_group("group");
+        apply_edit_value(&mut h, 3, 3, "d", "first").unwrap();
+        apply_edit_value(&mut h, 4, 4, "e", "second").unwrap();
+        h.history.end_group();
+
+        assert_eq!(undo_value(&mut h).unwrap().as_deref(), Some("second"));
+        assert_eq!(redo_value(&mut h).unwrap().as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn undo_redo_maps_decorations_through_history_patches() {
+        let mut h = make_handle("abc abc");
+        h.wrap_map = WrapMap::new(h.buffer.text().split('\n'), 4, &h.wrap_policy);
+        let id = h
+            .add_decoration(4, 7, 7, "highlight")
+            .expect("decoration should be added");
+
+        assert_eq!(h.wrap_map.visual_line_count(0), 2);
+        apply_edit_value(&mut h, 0, 0, "x", "insert").unwrap();
+        assert_eq!(h.decorations.query_range(5, 8).len(), 1);
+        assert_eq!(h.wrap_map.visual_line_count(0), 2);
+
+        undo_value(&mut h).unwrap();
+        assert_eq!(h.get_text(), "abc abc");
+        assert_eq!(h.decorations.query_range(4, 7).len(), 1);
+        assert_eq!(h.wrap_map.visual_line_count(0), 2);
+
+        redo_value(&mut h).unwrap();
+        assert_eq!(h.get_text(), "xabc abc");
+        assert_eq!(h.decorations.query_range(5, 8).len(), 1);
+        assert_eq!(h.wrap_map.visual_line_count(0), 2);
+        assert!(h.remove_decoration(&id).unwrap());
     }
 
     // -- Error mapping ------------------------------------------------------

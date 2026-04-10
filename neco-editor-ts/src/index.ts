@@ -16,6 +16,7 @@ export type {
   VisualLineFrame,
   LayoutMode,
   SearchMatchInfo,
+  DecorationInfo,
   IndentInfo,
   BracketPair,
   EditorError,

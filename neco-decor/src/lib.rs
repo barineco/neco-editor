@@ -114,6 +114,18 @@ impl Decoration {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DecorationId(u64);
 
+impl DecorationId {
+    /// Returns the underlying raw identifier for external boundaries.
+    pub fn into_raw(self) -> u64 {
+        self.0
+    }
+
+    /// Reconstructs a decoration identifier from a raw value.
+    pub fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct DecorationEntry {
     id: DecorationId,
@@ -201,19 +213,19 @@ impl DecorationSet {
         self.entries.retain_mut(|entry| {
             let d = &mut entry.decoration;
 
-            // 変更範囲より前
+            // Before the changed range.
             if d.end <= change_start {
                 return true;
             }
 
-            // 変更範囲より後
+            // After the changed range.
             if d.start >= old_end {
                 d.start = (d.start as isize + delta) as usize;
                 d.end = (d.end as isize + delta) as usize;
                 return true;
             }
 
-            // 重なり
+            // Overlapping the changed range.
             match d.kind {
                 DecorationKind::Highlight => {
                     if d.start >= change_start {
@@ -233,13 +245,13 @@ impl DecorationSet {
                     true
                 }
                 DecorationKind::Widget { .. } => {
-                    // 完全包含なら削除
+                    // Drop widgets fully covered by the change.
                     if d.start >= change_start && d.end <= old_end {
                         return false;
                     }
-                    // 部分重なり: boundary クランプ
+                    // Clamp partially overlapping widgets to the boundary.
                     if d.start < change_start {
-                        // start は維持
+                        // Keep start.
                     } else {
                         d.start = change_start;
                     }
@@ -354,6 +366,16 @@ mod tests {
     }
 
     #[test]
+    fn decoration_id_roundtrips_through_raw_value() {
+        let mut set = DecorationSet::new();
+        let id = set.add(Decoration::marker(0, 1));
+        let raw = id.into_raw();
+
+        assert!(set.remove(DecorationId::from_raw(raw)));
+        assert!(set.is_empty());
+    }
+
+    #[test]
     fn set_query_range() {
         let mut set = DecorationSet::new();
         set.add(Decoration::highlight(0, 5, 1).unwrap());
@@ -409,7 +431,7 @@ mod tests {
     fn map_after_change_shifted() {
         let mut set = DecorationSet::new();
         set.add(Decoration::highlight(20, 30, 1).unwrap());
-        // 挿入: [10, 15) → [10, 20) で delta = +5
+        // Insertion: [10, 15) -> [10, 20), delta = +5.
         set.map_through_change(10, 15, 20);
 
         let d = set.iter().next().unwrap().1;
@@ -420,13 +442,13 @@ mod tests {
     #[test]
     fn map_highlight_overlap_clamp() {
         let mut set = DecorationSet::new();
-        // highlight [5, 15) が変更 [10, 20) → [10, 12) と重なる
+        // Highlight [5, 15) overlaps change [10, 20) -> [10, 12).
         set.add(Decoration::highlight(5, 15, 1).unwrap());
         set.map_through_change(10, 20, 12);
 
         let d = set.iter().next().unwrap().1;
         assert_eq!(d.start(), 5);
-        // end は変更範囲内なのでクランプ → new_end=12
+        // End is inside the changed range, so clamp it to new_end=12.
         assert_eq!(d.end(), 12);
     }
 
@@ -434,7 +456,7 @@ mod tests {
     fn map_marker_deleted_in_change() {
         let mut set = DecorationSet::new();
         set.add(Decoration::marker(12, 1));
-        // 変更 [10, 20)
+        // Change [10, 20).
         set.map_through_change(10, 20, 15);
         assert!(set.is_empty());
     }
@@ -443,7 +465,7 @@ mod tests {
     fn map_widget_fully_contained_deleted() {
         let mut set = DecorationSet::new();
         set.add(Decoration::widget(12, 18, 1, true).unwrap());
-        // 変更 [10, 20)
+        // Change [10, 20).
         set.map_through_change(10, 20, 15);
         assert!(set.is_empty());
     }
@@ -451,7 +473,7 @@ mod tests {
     #[test]
     fn map_widget_partial_overlap_clamped() {
         let mut set = DecorationSet::new();
-        // widget [5, 15) が変更 [10, 20) → [10, 12) と部分重なり
+        // Widget [5, 15) partially overlaps change [10, 20) -> [10, 12).
         set.add(Decoration::widget(5, 15, 1, false).unwrap());
         set.map_through_change(10, 20, 12);
 
@@ -466,9 +488,9 @@ mod tests {
         set.add(Decoration::highlight(20, 30, 1).unwrap());
 
         let changes = [
-            RangeChange::new(0, 5, 10),   // delta +5 → [25, 35)
-            RangeChange::new(0, 3, 3),    // delta 0 → [25, 35)
-            RangeChange::new(40, 40, 42), // delta +2, 装飾より後なので変化なし
+            RangeChange::new(0, 5, 10),   // delta +5 -> [25, 35)
+            RangeChange::new(0, 3, 3),    // delta 0 -> [25, 35)
+            RangeChange::new(40, 40, 42), // delta +2, after decoration, no change
         ];
         set.map_through_changes(&changes);
 

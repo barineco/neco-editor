@@ -20,7 +20,7 @@ pub struct SearchQuery {
 }
 
 /// A single search hit with its byte range and line/column position.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SearchMatch {
     range: TextRange,
     line: u32,
@@ -149,6 +149,20 @@ pub fn find_next(
     }
 }
 
+/// Find the last occurrence of `query` whose match ends at or before
+/// `to_offset`.
+///
+/// Returns `Ok(None)` when no match exists before that offset.
+pub fn find_previous(
+    text: &str,
+    line_index: &LineIndex,
+    query: &SearchQuery,
+    to_offset: usize,
+) -> Result<Option<SearchMatch>, SearchError> {
+    let all = find_all(text, line_index, query)?;
+    Ok(all.into_iter().rfind(|m| m.range().end() <= to_offset))
+}
+
 /// Replace every occurrence of `query` in `text` with `replacement`.
 ///
 /// Returns the new text and the number of replacements performed.
@@ -161,6 +175,27 @@ pub fn replace_all(
     let count = re.find_iter(text).count();
     let new_text = re.replace_all(text, replacement).into_owned();
     Ok((new_text, count))
+}
+
+/// Return every replacement as an original byte range plus expanded text.
+pub fn replace_all_ranges(
+    text: &str,
+    query: &SearchQuery,
+    replacement: &str,
+) -> Result<Vec<(TextRange, String)>, SearchError> {
+    let re = build_regex(query)?;
+    let mut replacements = Vec::new();
+    for caps in re.captures_iter(text) {
+        let m = caps
+            .get(0)
+            .expect("regex captures must include the full match");
+        let mut expanded = String::new();
+        caps.expand(replacement, &mut expanded);
+        let range =
+            TextRange::new(m.start(), m.end()).expect("match offsets must satisfy start <= end");
+        replacements.push((range, expanded));
+    }
+    Ok(replacements)
 }
 
 /// Replace the first occurrence of `query` at or after `from_offset`.
@@ -179,13 +214,18 @@ pub fn replace_next(
         return Ok(None);
     }
     // Use find_at to preserve word boundary semantics at mid-word offsets.
-    match re.find_at(text, from_offset) {
-        Some(m) => {
+    match re.captures_at(text, from_offset) {
+        Some(caps) => {
+            let m = caps
+                .get(0)
+                .expect("regex captures must include the full match");
             let sm = match_from_offsets(text, line_index, m.start(), m.end())?;
+            let mut expanded = String::new();
+            caps.expand(replacement, &mut expanded);
 
             let mut new_text = String::with_capacity(text.len());
             new_text.push_str(&text[..m.start()]);
-            new_text.push_str(replacement);
+            new_text.push_str(&expanded);
             new_text.push_str(&text[m.end()..]);
 
             Ok(Some((new_text, sm)))
@@ -431,6 +471,27 @@ mod tests {
         assert_eq!(m.range().start(), 11);
     }
 
+    #[test]
+    fn find_previous_returns_last_match_ending_at_offset() {
+        let text = "abc abc abc";
+        let li = LineIndex::new(text);
+
+        let m = find_previous(text, &li, &plain("abc"), 7).unwrap().unwrap();
+
+        assert_eq!(m.range().start(), 4);
+        assert_eq!(m.range().end(), 7);
+    }
+
+    #[test]
+    fn find_previous_returns_none_before_first_match() {
+        let text = "abc abc";
+        let li = LineIndex::new(text);
+
+        let result = find_previous(text, &li, &plain("abc"), 2).unwrap();
+
+        assert!(result.is_none());
+    }
+
     // -----------------------------------------------------------------------
     // replace_all
     // -----------------------------------------------------------------------
@@ -481,6 +542,25 @@ mod tests {
         assert_eq!(count, 2);
     }
 
+    #[test]
+    fn replace_all_ranges_expands_regex_backreference() {
+        let text = "foo123bar456";
+        let q = SearchQuery {
+            pattern: r"(\d+)".to_string(),
+            is_regex: true,
+            case_sensitive: true,
+            whole_word: false,
+        };
+
+        let replacements = replace_all_ranges(text, &q, "[$1]").unwrap();
+
+        assert_eq!(replacements.len(), 2);
+        assert_eq!(replacements[0].0.start(), 3);
+        assert_eq!(replacements[0].0.end(), 6);
+        assert_eq!(replacements[0].1, "[123]");
+        assert_eq!(replacements[1].1, "[456]");
+    }
+
     // -----------------------------------------------------------------------
     // replace_next
     // -----------------------------------------------------------------------
@@ -506,6 +586,23 @@ mod tests {
             .unwrap();
         assert_eq!(new_text, "abc def XYZ");
         assert_eq!(m.range().start(), 8);
+    }
+
+    #[test]
+    fn replace_next_regex_backreference() {
+        let text = "foo123bar456";
+        let li = LineIndex::new(text);
+        let q = SearchQuery {
+            pattern: r"(\d+)".to_string(),
+            is_regex: true,
+            case_sensitive: true,
+            whole_word: false,
+        };
+
+        let (new_text, m) = replace_next(text, &li, &q, "[$1]", 0).unwrap().unwrap();
+
+        assert_eq!(new_text, "foo[123]bar456");
+        assert_eq!(m.range().start(), 3);
     }
 
     #[test]

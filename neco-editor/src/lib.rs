@@ -525,7 +525,7 @@ mod tests {
 
         assert_eq!(history.current_label(), "replace word");
 
-        let undo = history.undo().unwrap();
+        let undo = history.undo().unwrap().remove(0);
         let inverse = undo.inverse_patches.unwrap();
         let restored = apply_patches(buffer.text(), &inverse).unwrap();
 

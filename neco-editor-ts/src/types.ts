@@ -42,6 +42,16 @@ export interface SearchMatchInfo {
   column: number
 }
 
+/** A decoration attached to an editor range. */
+export interface DecorationInfo {
+  id: string
+  start: number
+  end: number
+  tag: number
+  kind: 'highlight' | 'marker' | 'widget'
+  block?: boolean
+}
+
 /** Detected indentation style. */
 export interface IndentInfo {
   style: 'tabs' | 'spaces'

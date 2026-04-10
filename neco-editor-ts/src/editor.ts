@@ -5,6 +5,7 @@ import type {
   Rect,
   VisualLineFrame,
   SearchMatchInfo,
+  DecorationInfo,
   IndentInfo,
   BracketPair,
   SearchOptions,
@@ -86,6 +87,65 @@ export class EditorSession {
 
   getSearchMatches(): SearchMatchInfo[] {
     return this.handle.getSearchMatches() as SearchMatchInfo[]
+  }
+
+  findPrevious(pattern: string, fromOffset: number, options?: SearchOptions): SearchMatchInfo | null {
+    return this.handle.findPrevious(
+      pattern,
+      fromOffset,
+      options?.isRegex ?? false,
+      options?.caseSensitive ?? true,
+      options?.wholeWord ?? false,
+    ) as SearchMatchInfo | null
+  }
+
+  replaceAll(pattern: string, replacement: string, options?: SearchOptions): number {
+    return this.handle.replaceAll(
+      pattern,
+      replacement,
+      options?.isRegex ?? false,
+      options?.caseSensitive ?? true,
+      options?.wholeWord ?? false,
+    ) as number
+  }
+
+  replaceNext(
+    pattern: string,
+    replacement: string,
+    fromOffset: number,
+    options?: SearchOptions,
+  ): SearchMatchInfo | null {
+    return this.handle.replaceNext(
+      pattern,
+      replacement,
+      fromOffset,
+      options?.isRegex ?? false,
+      options?.caseSensitive ?? true,
+      options?.wholeWord ?? false,
+    ) as SearchMatchInfo | null
+  }
+
+  // -- Decorations ----------------------------------------------------------
+
+  addDecoration(
+    start: number,
+    end: number,
+    tag: number,
+    kind: 'highlight' | 'marker' | 'widget',
+  ): string {
+    return this.handle.addDecoration(start, end, tag, kind) as string
+  }
+
+  removeDecoration(id: string): boolean {
+    return this.handle.removeDecoration(id) as boolean
+  }
+
+  clearDecorationsByTag(tag: number): void {
+    this.handle.clearDecorationsByTag(tag)
+  }
+
+  queryDecorations(start: number, end: number): DecorationInfo[] {
+    return this.handle.queryDecorations(start, end) as DecorationInfo[]
   }
 
   // -- State -----------------------------------------------------------------
