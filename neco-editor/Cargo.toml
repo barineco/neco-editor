@@ -1,6 +1,6 @@
 [package]
 name = "neco-editor"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.82"
 license = "MIT"
@@ -17,13 +17,13 @@ path = "src/lib.rs"
 [dependencies]
 neco-textview = { version = "0.2", path = "../neco-textview" }
 neco-textpatch = { version = "0.1", path = "../neco-textpatch" }
-neco-decor = { version = "0.2", path = "../neco-decor" }
+neco-decor = { version = "0.3", path = "../neco-decor" }
 neco-diffcore = { version = "0.1", path = "../neco-diffcore" }
-neco-wrap = { version = "0.1", path = "../neco-wrap" }
-neco-history = { version = "0.1", path = "../neco-history" }
+neco-wrap = { version = "0.2", path = "../neco-wrap" }
+neco-history = { version = "0.2", path = "../neco-history" }
 neco-tree = { version = "0.1", path = "../../neco-crates/neco-tree" }
 neco-pathrel = { version = "0.1", path = "../neco-pathrel" }
 neco-filetree = { version = "0.1", path = "../neco-filetree" }
 neco-watchnorm = { version = "0.1", path = "../neco-watchnorm" }
-neco-editor-viewport = { version = "0.1", path = "../neco-editor-viewport" }
-neco-editor-search = { version = "0.1", path = "../neco-editor-search" }
+neco-editor-viewport = { version = "0.2", path = "../neco-editor-viewport" }
+neco-editor-search = { version = "0.2", path = "../neco-editor-search" }
