@@ -97,7 +97,6 @@
 .neco-line {
   position: relative;
   display: flex;
-  height: calc(1em * 1.5);
 }
 
 /* --- Per-line gutter cell (number inside each line) --- */

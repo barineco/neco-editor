@@ -26,6 +26,12 @@ export interface EditorViewOptions {
   readOnly?: boolean
   /** Tab size in spaces. */
   tabSize?: number
+  /** CSS font-family used for measurement and rendering. */
+  fontFamily?: string
+  /** Font size in CSS pixels. */
+  fontSize?: number
+  /** Line height override in CSS pixels. */
+  lineHeight?: number
   /** Strict 1:2 half-width/full-width grid. */
   monospaceGrid?: boolean
   /** Renderer backend. WebGPU is the default and fails explicitly when unavailable. */
@@ -103,6 +109,9 @@ export class EditorView {
   private disposed = false
   private options: EditorViewOptions
   private tabSize: number
+  private fontFamily: string
+  private fontSize: number
+  private lineHeightOverride: number | undefined
   private lineHeight = 0
   private charWidth = 0
   private cjkCharWidth = 0
@@ -138,15 +147,22 @@ export class EditorView {
     this.options = options
     this.container = options.container
     this.tabSize = options.tabSize ?? DEFAULT_TAB_SIZE
+    this.fontFamily = options.fontFamily ?? DEFAULT_FONT_FAMILY
+    this.fontSize = options.fontSize ?? DEFAULT_FONT_SIZE
+    this.lineHeightOverride = options.lineHeight
 
     // 1. Add editor root class
     this.container.classList.add('neco-editor')
+    this.applyHostFontStyles()
 
     // 2. Measure font metrics
-    const metrics = measureFontMetrics(this.container, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE)
+    const metrics = measureFontMetrics(this.container, this.fontFamily, this.fontSize)
     this.charWidth = metrics.charWidth
     this.cjkCharWidth = metrics.cjkCharWidth
     this.lineHeight = metrics.lineHeight
+    if (this.lineHeightOverride !== undefined) {
+      this.lineHeight = this.lineHeightOverride
+    }
 
     // 3. Create or reuse EditorSession
     if (options.session) {
@@ -458,6 +474,21 @@ export class EditorView {
       this.options.tabSize = opts.tabSize
       metricsChanged = true
     }
+    if (opts.fontFamily !== undefined) {
+      this.fontFamily = opts.fontFamily
+      this.options.fontFamily = opts.fontFamily
+      metricsChanged = true
+    }
+    if (opts.fontSize !== undefined) {
+      this.fontSize = opts.fontSize
+      this.options.fontSize = opts.fontSize
+      metricsChanged = true
+    }
+    if (opts.lineHeight !== undefined) {
+      this.lineHeightOverride = opts.lineHeight
+      this.options.lineHeight = opts.lineHeight
+      metricsChanged = true
+    }
     if (opts.monospaceGrid !== undefined) {
       this.options.monospaceGrid = opts.monospaceGrid
       metricsChanged = true
@@ -468,7 +499,8 @@ export class EditorView {
       this.renderer.updateGutterWidth(gutterWidth)
     }
     if (metricsChanged) {
-      this.updateSessionMetrics()
+      this.updateMetrics()
+      return
     }
     this.scheduleRender()
   }
@@ -530,14 +562,23 @@ export class EditorView {
   // =========================================================================
 
   updateMetrics(): void {
-    const metrics = measureFontMetrics(this.container, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE)
+    this.applyHostFontStyles()
+    const metrics = measureFontMetrics(this.container, this.fontFamily, this.fontSize)
     this.charWidth = metrics.charWidth
     this.cjkCharWidth = metrics.cjkCharWidth
     this.lineHeight = metrics.lineHeight
+    if (this.lineHeightOverride !== undefined) {
+      this.lineHeight = this.lineHeightOverride
+    }
     this.updateSessionMetrics()
     this.scrollManager.setLineHeight(this.lineHeight)
     this.updateTotalLines()
     this.scheduleRender()
+  }
+
+  private applyHostFontStyles(): void {
+    this.container.style.fontFamily = this.fontFamily
+    this.container.style.fontSize = `${this.fontSize}px`
   }
 
   private effectiveCjkCharWidth(): number {
@@ -984,6 +1025,9 @@ export class EditorView {
 
     // Render lines
     this.renderer.renderLines(lines, currentLineNumber)
+    for (const lineEl of Array.from(linesEl.children)) {
+      ;(lineEl as HTMLElement).style.height = `${this.lineHeight}px`
+    }
 
     // Render caret and selection via the shared screen-space transform.
     if (caretRect) {
