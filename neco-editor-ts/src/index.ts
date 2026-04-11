@@ -1,4 +1,4 @@
-export { EditorSession } from './editor'
+export { EditorSession, detectLanguage } from './editor'
 export { EditorView } from './editor-view'
 export {
   applyTheme,

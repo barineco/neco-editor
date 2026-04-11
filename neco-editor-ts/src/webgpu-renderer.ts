@@ -358,6 +358,8 @@ export class WebGpuRenderer implements EditorRenderer {
   private scheduleDraw(): void {
     void this.ready.then(() => {
       if (!this.disposed) this.draw()
+    }).catch((err: unknown) => {
+      console.error('[neco-editor] WebGPU initialization failed:', err)
     })
   }
 

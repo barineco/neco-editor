@@ -1,8 +1,9 @@
-import { EditorView, type EditorViewOptions } from 'neco-editor'
+import { EditorView, applyTheme, parseThemeKdl, detectLanguage, type EditorViewOptions } from 'neco-editor'
 import 'neco-editor/styles.css'
 import initWasm from 'neco-editor-wasm'
 import { invoke } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
+import themeKdlText from './slate-nocturne.kdl?raw'
 
 // Bundled sample text shown on startup
 const SAMPLE_TEXT = `// Welcome to Neco Editor
@@ -23,23 +24,10 @@ console.log(message)
 // - Scroll with mouse wheel to test gutter sync
 `
 
-const LANG_MAP: Record<string, string> = {
-  ts: 'typescript',
-  tsx: 'typescript',
-  js: 'javascript',
-  jsx: 'javascript',
-  rs: 'rust',
-  json: 'json',
-  md: 'markdown',
-  html: 'html',
-  css: 'css',
-  toml: 'toml',
-}
-
-function detectLanguage(path: string | null): string {
-  if (path === null) return 'typescript'
+function detectLanguageForPath(path: string | null): string {
+  if (path === null) return 'TypeScript'
   const ext = path.split('.').pop()?.toLowerCase() ?? ''
-  return LANG_MAP[ext] ?? 'plain'
+  return detectLanguage(ext) ?? 'plain'
 }
 
 interface AppState {
@@ -132,7 +120,7 @@ async function handleOpen(): Promise<void> {
   if (typeof selected !== 'string') return
 
   const text = await invoke<string>('neco_read_file', { path: selected })
-  const lang = detectLanguage(selected)
+  const lang = detectLanguageForPath(selected)
   const view = createEditor(text, lang)
   view.markClean()
   state = { view, currentPath: selected, currentLang: lang }
@@ -151,7 +139,7 @@ async function handleSave(): Promise<void> {
     if (typeof chosen !== 'string') return
     path = chosen
     state.currentPath = path
-    state.currentLang = detectLanguage(path)
+    state.currentLang = detectLanguageForPath(path)
     updateFilePath(path)
     updateLangIndicator(state.currentLang)
   }
@@ -165,12 +153,15 @@ async function main(): Promise<void> {
   // Load WASM (vite resolves 'neco-editor-wasm' to the pkg's main module)
   await initWasm()
 
+  applyTheme(parseThemeKdl(themeKdlText))
+
   // Initial editor with sample text
-  const view = createEditor(SAMPLE_TEXT, 'typescript')
+  const initialLang = detectLanguageForPath(null)
+  const view = createEditor(SAMPLE_TEXT, initialLang)
   view.markClean()
-  state = { view, currentPath: null, currentLang: 'typescript' }
+  state = { view, currentPath: null, currentLang: initialLang }
   updateFilePath(null)
-  updateLangIndicator('typescript')
+  updateLangIndicator(initialLang)
   updateCursorPos(view, view.getCursor())
   updateDirty(view)
   view.focus()

@@ -127,8 +127,10 @@ fn resolve_language_alias<'a>(
     syntax_set
         .find_syntax_by_token(language)
         .or_else(|| match language {
-            "TypeScript" | "ts" | "tsx" => syntax_set.find_syntax_by_token("JavaScript"),
-            "KDL" => syntax_set.find_syntax_by_token("KDL2"),
+            "TypeScript" | "typescript" | "ts" | "tsx" => {
+                syntax_set.find_syntax_by_token("JavaScript")
+            }
+            "KDL" | "kdl" => syntax_set.find_syntax_by_token("KDL2"),
             _ => None,
         })
 }
@@ -673,6 +675,24 @@ mod tests {
         let after_reset = highlighter.tokenize_line(target_line);
 
         assert_eq!(before_reset, after_reset);
+    }
+
+    #[test]
+    fn syntax_highlighter_accepts_lowercase_language_aliases() {
+        let grammar_set = GrammarSet::default_set();
+
+        assert!(
+            SyntaxHighlighter::new(&grammar_set, "typescript").is_some(),
+            "lowercase 'typescript' must resolve via alias"
+        );
+        assert!(
+            SyntaxHighlighter::new(&grammar_set, "kdl").is_some(),
+            "lowercase 'kdl' must resolve via alias"
+        );
+        assert!(
+            SyntaxHighlighter::new(&grammar_set, "rust").is_some(),
+            "lowercase 'rust' must resolve via case-insensitive name match"
+        );
     }
 
     #[test]

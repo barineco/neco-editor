@@ -39,6 +39,117 @@ Applications used for runtime verification. Not published to crates.io or npm, a
 |---|---|
 | [`neco-editor-gui`](./neco-editor-gui) | standalone desktop app mounting `neco-editor-ts` in a Tauri v2 window. Framework-less Vite + TypeScript frontend for exercising `EditorView` in isolation |
 
+## Architecture
+
+### Dependency graph
+
+```mermaid
+graph TD
+    pathrel["neco-pathrel"]
+    filetree["neco-filetree"]
+    watchnorm["neco-watchnorm"]
+    textview["neco-textview"]
+    textpatch["neco-textpatch"]
+    decor["neco-decor"]
+    wrap["neco-wrap"]
+    diffcore["neco-diffcore"]
+    history["neco-history"]
+    syntax["neco-syntax-textmate"]
+    search["neco-editor-search"]
+    viewport["neco-editor-viewport"]
+    editor["neco-editor\nEditorBuffer / re-export"]
+    wasm["neco-editor-wasm\nEditorHandle"]
+    ts["neco-editor-ts\nEditorSession / EditorView"]
+    gui["neco-editor-gui"]
+
+    filetree --> pathrel
+    decor --> textview
+    wrap --> textview
+    diffcore --> textpatch
+    history --> textpatch
+    search --> textview
+    viewport --> textview
+    viewport --> wrap
+    editor --> pathrel
+    editor --> filetree
+    editor --> watchnorm
+    editor --> textview
+    editor --> textpatch
+    editor --> decor
+    editor --> wrap
+    editor --> diffcore
+    editor --> history
+    editor --> search
+    editor --> viewport
+    editor --> syntax
+    wasm --> editor
+    wasm --> search
+    wasm --> viewport
+    wasm --> syntax
+    ts --> wasm
+    gui --> ts
+```
+
+### Edit data flow
+
+```mermaid
+flowchart TD
+    DOM["DOM input\nkeyboard / mouse / clipboard / composition"]
+    VIEW["EditorView\nneco-editor-ts/src/editor-view.ts"]
+    SESSION["EditorSession\nneco-editor-ts/src/editor.ts"]
+    HANDLE["EditorHandle\nneco-editor-wasm/src/lib.rs"]
+    BUFFER["EditorBuffer\nneco-editor/src/lib.rs"]
+    PATCH["TextPatch\nneco-textpatch"]
+    TEXTVIEW["LineIndex / RangeChange\nneco-textview"]
+    DECOR["DecorationSet\nneco-decor"]
+    WRAP["WrapMap\nneco-wrap"]
+    HISTORY["EditHistory\nneco-history"]
+    RENDER["renderer\nDOM / WebGPU"]
+
+    DOM --> VIEW --> SESSION --> HANDLE --> BUFFER
+    BUFFER --> PATCH
+    BUFFER --> TEXTVIEW
+    BUFFER --> DECOR
+    BUFFER --> WRAP
+    BUFFER --> HISTORY
+    BUFFER --> HANDLE --> SESSION --> VIEW --> RENDER
+```
+
+### Display and coordinates
+
+```mermaid
+flowchart TD
+    VIEW["EditorView"]
+    SESSION["EditorSession"]
+    HANDLE["EditorHandle"]
+    VIEWPORT["neco-editor-viewport\nvisible lines / rects / hit test"]
+    COORDS["CoordinateMap\nneco-editor-ts/src/coordinates.ts"]
+    SCROLL["ScrollManager\nneco-editor-ts/src/scroll.ts"]
+    RENDERER["EditorRenderer\nrenderer.ts / webgpu-renderer.ts"]
+
+    VIEW --> SESSION --> HANDLE --> VIEWPORT --> HANDLE --> SESSION --> VIEW
+    VIEW --> COORDS
+    VIEW --> SCROLL
+    VIEW --> RENDERER
+    COORDS --> RENDERER
+    SCROLL --> RENDERER
+```
+
+### TypeScript layer
+
+| File | Responsibility |
+|---|---|
+| `neco-editor-ts/src/editor.ts` | `EditorSession`: typed wrapper around WASM `EditorHandle` |
+| `neco-editor-ts/src/editor-view.ts` | `EditorView`: integrates session, renderer, scroll, input, mouse, clipboard |
+| `neco-editor-ts/src/renderer.ts` | DOM renderer and renderer interface |
+| `neco-editor-ts/src/webgpu-renderer.ts` | WebGPU renderer |
+| `neco-editor-ts/src/coordinates.ts` | branded types and transforms for document / viewport / container / screen coordinates |
+| `neco-editor-ts/src/input.ts` | keyboard input to editor command mapping |
+| `neco-editor-ts/src/mouse.ts` | mouse input and hit test integration |
+| `neco-editor-ts/src/clipboard.ts` | clipboard and paste handling |
+| `neco-editor-ts/src/scroll.ts` | scroll state management |
+| `neco-editor-ts/src/theme.ts` | theme KDL parsing and token style mapping |
+
 Each crate is intentionally independent so it can be published and consumed separately on crates.io. The repository is a maintenance monorepo; each crate stands on its own as a library.
 
 This repository is still under active development, and crates vary in maturity. Some parts are already usable, while others are still being hardened or reshaped.

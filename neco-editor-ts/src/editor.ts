@@ -1,4 +1,4 @@
-import { EditorHandle } from 'neco-editor-wasm'
+import { EditorHandle, detectLanguage as wasmDetectLanguage } from 'neco-editor-wasm'
 import type {
   RenderLine,
   RangeChange,
@@ -244,4 +244,14 @@ export class EditorSession {
   free(): void {
     this.handle.free()
   }
+}
+
+/**
+ * Detect the display language name for a file extension using bundled grammars.
+ *
+ * Returns the language name (e.g. "Rust", "TypeScript") or `null` when no
+ * grammar matches the extension.
+ */
+export function detectLanguage(extension: string): string | null {
+  return wasmDetectLanguage(extension) ?? null
 }

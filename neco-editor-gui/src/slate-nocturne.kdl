@@ -1,0 +1,60 @@
+theme "slate-nocturne" {
+  bg {
+    canvas "#10151b"
+    app "#18202a"
+    panel "rgba(24, 32, 42, 0.92)"
+    panel-rail "rgba(19, 26, 34, 0.94)"
+    hover "rgba(115, 153, 214, 0.14)"
+    button "rgba(34, 44, 60, 0.88)"
+    button-hover "rgba(42, 55, 75, 0.96)"
+    body "#18202a"
+  }
+
+  fg {
+    base "#edf2f7"
+    muted "#94a3b8"
+    accent "#67b7ff"
+    strong "#c8e4ff"
+    button "#dbe8f6"
+  }
+
+  state {
+    error-fg "#e1a8b3"
+    warning-fg "#d9c184"
+  }
+
+  syntax {
+    plain "#edf2f7"
+    keyword "#8ec5ff"
+    type "#8fd3b4"
+    string "#d9c27c"
+    number "#f0a7a7"
+    comment "#697a90"
+    accent "#b69cff"
+  }
+
+  border {
+    soft "rgba(148, 163, 184, 0.18)"
+    strong "rgba(148, 163, 184, 0.30)"
+    button "rgba(104, 132, 168, 0.26)"
+  }
+
+  editor {
+    bg "#18202a"
+    fg "#edf2f7"
+    gutter "#18202a"
+    gutter-border "rgba(148, 163, 184, 0.10)"
+    line-number "#94a3b8"
+    active-line-number "#edf2f7"
+    cursor "#67b7ff"
+    selection "rgba(103, 183, 255, 0.16)"
+    selection-inactive "rgba(94, 165, 255, 0.10)"
+    selected-line "rgba(255, 255, 255, 0.045)"
+    current-line "rgba(255, 255, 255, 0.03)"
+    scrollbar "rgba(104, 132, 168, 0.34)"
+    scrollbar-hover "#67b7ff"
+    scrollbar-active "#c8e4ff"
+    indent-guide "rgba(148, 163, 184, 0.11)"
+    indent-guide-active "rgba(103, 183, 255, 0.28)"
+  }
+}

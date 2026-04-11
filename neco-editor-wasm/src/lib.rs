@@ -231,6 +231,18 @@ pub struct EditorHandle {
     read_only: bool,
 }
 
+/// Detect the display language name for a file extension using bundled grammars.
+///
+/// Returns the language name (e.g. "Rust", "TypeScript") or `null` when no
+/// grammar matches the extension.
+#[wasm_bindgen(js_name = detectLanguage)]
+pub fn detect_language(extension: &str) -> Option<String> {
+    let grammar_set = GrammarSet::default_set();
+    grammar_set
+        .detect_language(extension)
+        .map(|s| s.to_string())
+}
+
 #[wasm_bindgen]
 impl EditorHandle {
     #[wasm_bindgen(constructor)]
@@ -892,34 +904,52 @@ fn get_visible_lines_value(handle: &mut EditorHandle, scroll_top: f64, height: f
         // Defensive: skip out-of-range lines instead of panicking with expect.
         // This guards against any transient inconsistency between line_count and
         // line_range or text bounds, keeping the WASM module in a usable state.
-        let line_range = match handle.buffer.line_index().line_range(log_line) {
+        let display_range = match handle.buffer.line_index().line_range(log_line) {
             Ok(r) => r,
             Err(_) => break,
         };
-        if line_range.start() > text_len || line_range.end() > text_len {
+        // line_range_with_newline includes the trailing \n so that syntect
+        // can track multi-line parser state correctly.
+        let tokenize_range = match handle.buffer.line_index().line_range_with_newline(log_line) {
+            Ok(r) => r,
+            Err(_) => break,
+        };
+        if tokenize_range.start() > text_len || tokenize_range.end() > text_len {
             break;
         }
-        let line_text = &text[line_range.start()..line_range.end()];
+        let display_text = &text[display_range.start()..display_range.end()];
+        let tokenize_text = &text[tokenize_range.start()..tokenize_range.end()];
 
         let tokens = if let Some(ref mut hl) = handle.highlighter {
-            hl.tokenize_line(line_text)
+            hl.tokenize_line(tokenize_text)
         } else {
             Vec::new()
         };
 
         // Only emit render lines for visible logical lines.
         if log_line >= first_log && log_line <= last_log {
+            let display_len = display_text.len();
             let render_line = Object::new();
             set_prop(
                 &render_line,
                 "lineNumber",
                 JsValue::from_f64(f64::from(log_line + 1)),
             );
-            set_prop(&render_line, "text", JsValue::from_str(line_text));
+            set_prop(&render_line, "text", JsValue::from_str(display_text));
 
             let token_arr = Array::new();
             for span in &tokens {
-                token_arr.push(&token_span_to_js_value(span));
+                // Clamp token ranges to display text length (excludes \n
+                // that was appended for the tokenizer).
+                let clamped_start = span.range.start.min(display_len);
+                let clamped_end = span.range.end.min(display_len);
+                if clamped_start < clamped_end {
+                    let clamped = TokenSpan {
+                        range: clamped_start..clamped_end,
+                        kind: span.kind,
+                    };
+                    token_arr.push(&token_span_to_js_value(&clamped));
+                }
             }
             set_prop(&render_line, "tokens", token_arr.into());
 
